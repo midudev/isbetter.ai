@@ -1,23 +1,23 @@
+---
+import "../styles/global.css";
+import IconSprite from "../components/IconSprite.astro";
+---
+
 <!doctype html>
-<html lang="en">
+<html lang="en" class="dark">
 	<head>
 		<meta charset="UTF-8" />
-		<meta name="viewport" content="width=device-width" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-		<link rel="icon" href="/favicon.ico" />
 		<meta name="generator" content={Astro.generator} />
-		<title>Astro Basics</title>
+		<meta
+			name="description"
+			content="Run one prompt across multiple AI models and compare output, tokens, latency and cost — side by side."
+		/>
+		<title>AI BATTLE — model arena</title>
 	</head>
-	<body>
+	<body class="grid-bg">
+		<IconSprite />
 		<slot />
 	</body>
 </html>
-
-<style>
-	html,
-	body {
-		margin: 0;
-		width: 100%;
-		height: 100%;
-	}
-</style>
