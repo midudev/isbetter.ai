@@ -1,0 +1,215 @@
+@import "tailwindcss";
+
+/* ---------------------------------- Fonts --------------------------------- */
+@font-face {
+  font-family: "Geist Pixel";
+  src: url("/fonts/GeistPixel-Square.woff2") format("woff2");
+  font-weight: 500;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Geist Pixel Line";
+  src: url("/fonts/GeistPixel-Line.woff2") format("woff2");
+  font-weight: 500;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Geist Mono";
+  src: url("/fonts/GeistMono-Variable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+/* ---------------------------------- Theme --------------------------------- */
+@theme {
+  --font-pixel: "Geist Pixel", "Geist Mono", monospace;
+  --font-pixel-line: "Geist Pixel Line", "Geist Mono", monospace;
+  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, monospace;
+
+  --color-ink: #ededed;
+  --color-ink-dim: #a1a1a1;
+  --color-ink-faint: #6e6e6e;
+  --color-surface: #0a0a0a;
+  --color-panel: #0f0f0f;
+  --color-panel-hi: #161616;
+  --color-line: rgba(255, 255, 255, 0.09);
+  --color-line-hi: rgba(255, 255, 255, 0.16);
+  --color-accent: #d8ff3e;
+}
+
+/* --------------------------------- Globals -------------------------------- */
+@layer base {
+  html,
+  body {
+    margin: 0;
+    width: 100%;
+    min-height: 100%;
+    background: var(--color-surface);
+    color: var(--color-ink);
+    font-family: var(--font-mono);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection {
+    background: var(--color-accent);
+    color: #000;
+  }
+
+  /* Tabler icon defaults. Presentation attrs on a <g> inside <defs> do NOT
+     inherit into <use> instances, but inherited CSS properties DO cross the
+     shadow boundary — so we declare them here, on every icon <svg>. */
+  svg:has(use) {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  /* solid variant for brand marks (logo). */
+  svg.icon-fill {
+    fill: currentColor;
+    stroke: none;
+  }
+
+  /* Scrollbars */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-line-hi) transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  *::-webkit-scrollbar-thumb {
+    background: var(--color-line-hi);
+    border-radius: 999px;
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
+
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Streaming caret */
+@keyframes battle-blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+.caret {
+  display: inline-block;
+  width: 0.5em;
+  height: 1em;
+  margin-left: 1px;
+  transform: translateY(2px);
+  background: var(--color-accent);
+  animation: battle-blink 1s step-end infinite;
+}
+
+/* Spin for loading rings */
+@keyframes battle-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.spin {
+  animation: battle-spin 0.8s linear infinite;
+}
+
+/* ------------------------- Syntax highlighting (hljs) ------------------------- */
+.hljs {
+  color: var(--color-ink-dim);
+  background: transparent;
+}
+.hljs-comment,
+.hljs-quote {
+  color: #6e7681;
+  font-style: italic;
+}
+.hljs-tag,
+.hljs-punctuation {
+  color: #8b949e;
+}
+.hljs-name,
+.hljs-selector-tag {
+  color: #7c9cff;
+}
+.hljs-attr,
+.hljs-attribute,
+.hljs-selector-class,
+.hljs-selector-id,
+.hljs-selector-pseudo {
+  color: #d2a8ff;
+}
+.hljs-string,
+.hljs-meta .hljs-string,
+.hljs-regexp {
+  color: #ffb86b;
+}
+.hljs-keyword,
+.hljs-type,
+.hljs-literal,
+.hljs-name.hljs-keyword {
+  color: #ff8fab;
+}
+.hljs-number,
+.hljs-symbol {
+  color: #f78c6c;
+}
+.hljs-title,
+.hljs-title.function_,
+.hljs-built_in,
+.hljs-function .hljs-title {
+  color: #d8ff3e;
+}
+.hljs-property,
+.hljs-variable,
+.hljs-params {
+  color: var(--color-ink);
+}
+.hljs-doctag,
+.hljs-meta {
+  color: #8b949e;
+}
+
+/* Code view with line numbers */
+.code-block {
+  min-width: 100%;
+  width: max-content;
+}
+.code-line {
+  display: flex;
+}
+.code-ln {
+  position: sticky;
+  left: 0;
+  flex: 0 0 3rem;
+  padding: 0 0.75rem 0 0.5rem;
+  text-align: right;
+  color: var(--color-ink-faint);
+  background: var(--color-surface);
+  border-right: 1px solid var(--color-line);
+  user-select: none;
+}
+.code-src {
+  white-space: pre;
+  padding: 0 1rem;
+}
+
+/* Subtle dotted grid background */
+.grid-bg {
+  background-image: radial-gradient(
+    circle at 1px 1px,
+    rgba(255, 255, 255, 0.045) 1px,
+    transparent 0
+  );
+  background-size: 22px 22px;
+}
