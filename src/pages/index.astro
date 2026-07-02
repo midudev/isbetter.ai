@@ -1,11 +1,328 @@
 ---
-import Welcome from '../components/Welcome.astro';
-import Layout from '../layouts/Layout.astro';
-
-// Welcome to Astro! Wondering what to do next? Check out the Astro documentation at https://docs.astro.build
-// Don't want to use any of this? Delete everything in this file, the `assets`, `components`, and `layouts` directories, and start fresh.
+import Layout from "../layouts/Layout.astro";
 ---
 
 <Layout>
-	<Welcome />
+	<div class="mx-auto flex min-h-screen max-w-[1500px] flex-col px-4 sm:px-6 lg:px-8">
+		<!-- ================================ HEADER ================================ -->
+		<header class="flex items-center justify-between gap-4 py-5">
+			<div class="flex items-center gap-3">
+				<span class="grid size-9 place-items-center rounded-md bg-[var(--color-accent)] text-black shadow-[0_0_24px_-4px_var(--color-accent)]">
+					<svg class="icon-fill size-5"><use href="#i-bolt"></use></svg>
+				</span>
+				<div class="leading-none">
+					<h1 class="font-pixel text-[15px] tracking-[0.12em] text-[var(--color-ink)]">
+						AI&nbsp;BATTLE
+					</h1>
+					<p class="mt-1 text-[10px] uppercase tracking-[0.28em] text-[var(--color-ink-faint)]">
+						model&nbsp;arena
+					</p>
+				</div>
+			</div>
+
+			<div class="flex items-center gap-2">
+				<a
+					href="https://openrouter.ai/models"
+					target="_blank"
+					rel="noopener"
+					class="hidden items-center gap-1.5 rounded-md border border-[var(--color-line)] px-2.5 py-2 text-[11px] text-[var(--color-ink-dim)] transition-colors hover:border-[var(--color-line-hi)] hover:text-[var(--color-ink)] sm:flex"
+				>
+					<svg class="size-4"><use href="#i-world"></use></svg>
+					<span>openrouter</span>
+				</a>
+				<button
+					id="history-btn"
+					class="relative flex items-center gap-1.5 rounded-md border border-[var(--color-line)] px-2.5 py-2 text-[11px] text-[var(--color-ink-dim)] transition-colors hover:border-[var(--color-line-hi)] hover:text-[var(--color-ink)]"
+					title="Battle history  ·  shortcut: H"
+				>
+					<svg class="size-4"><use href="#i-history"></use></svg>
+					<span class="hidden sm:inline">History</span>
+					<span id="history-count" class="hidden min-w-[1.05rem] rounded bg-[var(--color-panel-hi)] px-1 text-center text-[10px] text-[var(--color-ink-dim)]">0</span>
+					<kbd class="hidden h-[1.05rem] min-w-[1.05rem] items-center justify-center rounded-[4px] border border-b-2 border-[var(--color-line-hi)] bg-[var(--color-panel-hi)] px-1 font-mono text-[9px] leading-none text-[var(--color-ink-faint)] sm:inline-flex">H</kbd>
+				</button>
+				<button
+					id="key-btn"
+					class="group relative flex items-center gap-1.5 rounded-md border border-[var(--color-line)] px-2.5 py-2 text-[11px] text-[var(--color-ink-dim)] transition-colors hover:border-[var(--color-line-hi)] hover:text-[var(--color-ink)]"
+					title="OpenRouter API key  ·  shortcut: K"
+				>
+					<svg class="size-4"><use href="#i-key"></use></svg>
+					<span id="key-label">API keys</span>
+					<kbd class="hidden h-[1.05rem] min-w-[1.05rem] items-center justify-center rounded-[4px] border border-b-2 border-[var(--color-line-hi)] bg-[var(--color-panel-hi)] px-1 font-mono text-[9px] leading-none text-[var(--color-ink-faint)] sm:inline-flex">K</kbd>
+					<span id="key-dot" class="size-1.5 rounded-full bg-[var(--color-accent)]"></span>
+				</button>
+			</div>
+		</header>
+
+		<!-- =============================== CONTROLS =============================== -->
+		<section class="rounded-xl border border-[var(--color-line)] bg-[var(--color-panel)]/70 backdrop-blur">
+			<!-- Models row -->
+			<div class="flex flex-col gap-3 border-b border-[var(--color-line)] p-4">
+				<div class="flex items-center gap-2 text-[10px] uppercase tracking-[0.22em] text-[var(--color-ink-faint)]">
+					<svg class="size-3.5"><use href="#i-sliders"></use></svg>
+					<span>contenders</span>
+					<span id="model-count" class="ml-1 rounded bg-[var(--color-panel-hi)] px-1.5 py-0.5 text-[var(--color-ink-dim)]">0</span>
+				</div>
+				<div class="flex flex-wrap items-center gap-2" id="models-chips">
+					<!-- chips injected here -->
+					<div class="relative" id="add-model-wrap">
+						<button
+							id="add-model-btn"
+							class="flex items-center gap-1.5 rounded-lg border border-dashed border-[var(--color-line-hi)] px-2.5 py-1.5 text-[12px] text-[var(--color-ink-dim)] transition-colors hover:border-[var(--color-accent)] hover:text-[var(--color-ink)]"
+							title="add model  ·  shortcut: M"
+						>
+							<svg class="size-4"><use href="#i-plus"></use></svg>
+							<span>add model</span>
+							<kbd class="hidden h-[1.05rem] min-w-[1.05rem] items-center justify-center rounded-[4px] border border-b-2 border-[var(--color-line-hi)] bg-[var(--color-panel-hi)] px-1 font-mono text-[9px] leading-none text-[var(--color-ink-faint)] sm:inline-flex">M</kbd>
+						</button>
+
+						<!-- Dropdown -->
+						<div
+							id="model-dropdown"
+							class="absolute left-0 top-full z-30 mt-2 hidden w-[min(92vw,420px)] overflow-hidden rounded-xl border border-[var(--color-line-hi)] bg-[var(--color-panel)] shadow-2xl"
+						>
+								<div class="flex gap-1 border-b border-[var(--color-line)] p-1.5">
+									<button data-provtab="openrouter" class="flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-[11px] transition-colors"><span class="size-1.5 rounded-full" style="background:#d8ff3e"></span>OpenRouter</button>
+									<button data-provtab="openai" class="flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-[11px] transition-colors"><span class="size-1.5 rounded-full" style="background:#10a37f"></span>OpenAI</button>
+									<button data-provtab="anthropic" class="flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-[11px] transition-colors"><span class="size-1.5 rounded-full" style="background:#d97757"></span>Anthropic</button>
+									<button data-provtab="local" class="flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-[11px] transition-colors"><span class="size-1.5 rounded-full" style="background:#8b93a7"></span>Local</button>
+								</div>
+							<div class="flex items-center gap-2 border-b border-[var(--color-line)] px-3 py-2.5">
+								<svg class="size-4 text-[var(--color-ink-faint)]"><use href="#i-search"></use></svg>
+								<input
+									id="model-search"
+									type="text"
+									placeholder="search models…  (or type an id + enter)"
+									autocomplete="off"
+									spellcheck="false"
+									class="w-full bg-transparent text-[12px] text-[var(--color-ink)] outline-none placeholder:text-[var(--color-ink-faint)]"
+								/>
+							</div>
+							<ul id="model-list" class="no-scrollbar max-h-[320px] overflow-y-auto py-1 text-[12px]">
+								<li class="px-3 py-6 text-center text-[var(--color-ink-faint)]">loading models…</li>
+							</ul>
+						</div>
+					</div>
+				</div>
+			</div>
+
+			<!-- System prompt (collapsible) -->
+			<div class="border-b border-[var(--color-line)]">
+				<button
+					id="sys-toggle"
+					class="flex w-full items-center gap-2 px-4 py-2.5 text-[10px] uppercase tracking-[0.22em] text-[var(--color-ink-faint)] transition-colors hover:text-[var(--color-ink-dim)]"
+					title="system prompt  ·  shortcut: S"
+				>
+					<svg id="sys-chevron" class="size-3.5 transition-transform"><use href="#i-chevron"></use></svg>
+					<span>system prompt</span>
+					<span class="ml-auto normal-case tracking-normal text-[var(--color-ink-faint)]">extraction harness</span>
+					<kbd class="hidden h-[1.05rem] min-w-[1.05rem] items-center justify-center rounded-[4px] border border-b-2 border-[var(--color-line-hi)] bg-[var(--color-panel-hi)] px-1 font-mono text-[9px] leading-none text-[var(--color-ink-faint)] sm:inline-flex">S</kbd>
+				</button>
+				<div id="sys-panel" class="hidden px-4 pb-4">
+					<textarea
+						id="system-prompt"
+						rows="9"
+						spellcheck="false"
+						class="no-scrollbar w-full resize-y rounded-lg border border-[var(--color-line)] bg-[var(--color-surface)] p-3 text-[12px] leading-relaxed text-[var(--color-ink-dim)] outline-none focus:border-[var(--color-line-hi)]"
+					></textarea>
+					<div class="mt-2 flex justify-end">
+						<button id="sys-reset" class="flex items-center gap-1.5 text-[11px] text-[var(--color-ink-faint)] transition-colors hover:text-[var(--color-ink)]">
+							<svg class="size-3.5"><use href="#i-refresh"></use></svg>
+							<span>reset to default</span>
+						</button>
+					</div>
+				</div>
+			</div>
+
+			<!-- Prompt + run -->
+			<div class="p-4">
+				<textarea
+					id="prompt"
+					rows="3"
+					placeholder="Describe what every model should build…  e.g. “a responsive pricing table with a monthly/yearly toggle”"
+					spellcheck="false"
+					class="no-scrollbar w-full resize-y rounded-lg border border-[var(--color-line)] bg-[var(--color-surface)] p-3.5 text-[14px] leading-relaxed text-[var(--color-ink)] outline-none transition-colors placeholder:text-[var(--color-ink-faint)] focus:border-[var(--color-line-hi)]"
+				></textarea>
+
+				<div class="mt-3 flex flex-wrap items-center justify-between gap-3">
+				  <div class="flex flex-wrap items-center gap-2">
+					<!-- View mode segmented control -->
+					<div
+						id="view-controls"
+						class="inline-flex rounded-lg border border-[var(--color-line)] bg-[var(--color-surface)] p-0.5"
+						role="tablist"
+						aria-label="View mode"
+					>
+						<button data-mode="output" class="view-tab flex items-center gap-1.5 rounded-md py-1.5 pl-3 pr-2 text-[12px] text-[var(--color-ink-dim)] transition-colors" title="Output — the AI's answer  ·  shortcut: O">
+							<svg class="size-4"><use href="#i-text"></use></svg>
+							<span class="hidden sm:inline">Output</span>
+							<kbd class="hidden h-[1.05rem] min-w-[1.05rem] items-center justify-center rounded-[4px] border border-b-2 border-[var(--color-line-hi)] bg-[var(--color-surface)] px-1 font-mono text-[9px] leading-none text-[var(--color-ink-faint)] sm:inline-flex">O</kbd>
+						</button>
+						<button data-mode="code" class="view-tab flex items-center gap-1.5 rounded-md py-1.5 pl-3 pr-2 text-[12px] text-[var(--color-ink-dim)] transition-colors" title="Code — the generated source  ·  shortcut: C">
+							<svg class="size-4"><use href="#i-code"></use></svg>
+							<span class="hidden sm:inline">Code</span>
+							<kbd class="hidden h-[1.05rem] min-w-[1.05rem] items-center justify-center rounded-[4px] border border-b-2 border-[var(--color-line-hi)] bg-[var(--color-surface)] px-1 font-mono text-[9px] leading-none text-[var(--color-ink-faint)] sm:inline-flex">C</kbd>
+						</button>
+						<button data-mode="preview" class="view-tab flex items-center gap-1.5 rounded-md py-1.5 pl-3 pr-2 text-[12px] text-[var(--color-ink-dim)] transition-colors" title="Preview — live render  ·  shortcut: P">
+							<svg class="size-4"><use href="#i-browser"></use></svg>
+							<span class="hidden sm:inline">Preview</span>
+							<kbd class="hidden h-[1.05rem] min-w-[1.05rem] items-center justify-center rounded-[4px] border border-b-2 border-[var(--color-line-hi)] bg-[var(--color-surface)] px-1 font-mono text-[9px] leading-none text-[var(--color-ink-faint)] sm:inline-flex">P</kbd>
+						</button>
+					</div>
+
+					<!-- Scroll-link toggle -->
+					<button
+						id="scroll-link-btn"
+						class="flex items-center gap-1.5 rounded-lg border border-[var(--color-line)] bg-[var(--color-surface)] py-1.5 pl-2.5 pr-2 text-[12px] text-[var(--color-ink-dim)] transition-colors hover:text-[var(--color-ink)]"
+						title="Scroll link — scroll every result together  ·  shortcut: L"
+						aria-pressed="false"
+					>
+						<svg class="size-4"><use href="#i-link"></use></svg>
+						<span class="hidden sm:inline">Scroll link</span>
+						<kbd class="hidden h-[1.05rem] min-w-[1.05rem] items-center justify-center rounded-[4px] border border-b-2 border-[var(--color-line-hi)] bg-[var(--color-surface)] px-1 font-mono text-[9px] leading-none text-[var(--color-ink-faint)] sm:inline-flex">L</kbd>
+					</button>
+				  </div>
+
+					<div class="flex items-center gap-2">
+						<button
+							id="rerun-all-btn"
+							class="hidden size-10 place-items-center rounded-lg border border-[var(--color-line)] bg-[var(--color-surface)] text-[var(--color-ink-dim)] transition-colors hover:border-[var(--color-line-hi)] hover:text-[var(--color-ink)] disabled:cursor-not-allowed disabled:opacity-40 [&:not(.hidden)]:grid"
+							title="Re-run every model from scratch (ignores cached results)"
+						>
+							<svg class="size-4"><use href="#i-refresh"></use></svg>
+						</button>
+						<button
+							id="run-btn"
+							class="group flex items-center gap-2 rounded-lg bg-[var(--color-accent)] px-5 py-2.5 text-[13px] font-medium text-black transition-all hover:shadow-[0_0_28px_-6px_var(--color-accent)] disabled:cursor-not-allowed disabled:opacity-40"
+						>
+							<svg id="run-icon" class="size-4"><use href="#i-play"></use></svg>
+							<span id="run-label">Run battle</span>
+							<kbd class="ml-1 hidden h-[1.05rem] items-center justify-center rounded-[4px] border border-b-2 border-black/30 bg-black/10 px-1.5 font-mono text-[10px] leading-none text-black/65 sm:inline-flex">⌘↵</kbd>
+						</button>
+					</div>
+				</div>
+			</div>
+		</section>
+
+		<!-- =============================== RESULTS =============================== -->
+		<section id="results" class="grid flex-1 content-start gap-4 py-6 grid-cols-[repeat(auto-fill,minmax(22rem,1fr))]">
+			<!-- empty state -->
+			<div id="empty-state" class="col-span-full grid place-items-center py-24 text-center">
+				<div class="flex flex-col items-center gap-4">
+					<span class="grid size-14 place-items-center rounded-2xl border border-[var(--color-line)] text-[var(--color-ink-faint)]">
+						<svg class="size-7"><use href="#i-bolt"></use></svg>
+					</span>
+					<div class="max-w-sm">
+						<p class="font-pixel text-[13px] tracking-[0.1em] text-[var(--color-ink-dim)]">no battle yet</p>
+						<p class="mt-2 text-[12px] leading-relaxed text-[var(--color-ink-faint)]">
+							Add a few contenders, write a prompt, and hit run. Outputs, tokens,
+							latency and cost line up side by side.
+						</p>
+					</div>
+				</div>
+			</div>
+		</section>
+
+		<footer class="flex items-center justify-between gap-2 border-t border-[var(--color-line)] py-4 text-[10px] uppercase tracking-[0.2em] text-[var(--color-ink-faint)]">
+			<span class="flex items-center gap-1.5">
+				<span>developed with</span>
+				<svg class="size-3.5 text-[var(--color-accent)]"><use href="#i-heart"></use></svg>
+				<span>by</span>
+				<a href="https://midu.dev" target="_blank" rel="noopener" class="text-[var(--color-ink-dim)] underline-offset-2 transition-colors hover:text-[var(--color-ink)] hover:underline">midudev</a>
+			</span>
+			<span class="hidden sm:inline">keys & prompts stay in your browser</span>
+		</footer>
+	</div>
+
+	<!-- ============================== API KEY MODAL ============================== -->
+	<div id="key-modal" class="fixed inset-0 z-50 hidden">
+		<div id="key-backdrop" class="absolute inset-0 bg-black/70 backdrop-blur-sm"></div>
+		<div class="absolute left-1/2 top-1/2 w-[min(92vw,440px)] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-[var(--color-line-hi)] bg-[var(--color-panel)] p-5 shadow-2xl">
+			<div class="flex items-center gap-2.5">
+				<span class="grid size-8 place-items-center rounded-lg bg-[var(--color-panel-hi)] text-[var(--color-accent)]">
+					<svg class="size-4"><use href="#i-key"></use></svg>
+				</span>
+				<div>
+					<h2 class="text-[13px] text-[var(--color-ink)]">API keys</h2>
+					<p class="text-[11px] text-[var(--color-ink-faint)]">stored locally — never leave your browser. Add the ones you'll use.</p>
+				</div>
+			</div>
+			<div class="mt-4 space-y-3">
+				<div>
+					<div class="mb-1 flex items-center justify-between">
+						<span class="flex items-center gap-1.5 text-[11px] text-[var(--color-ink-dim)]"><span class="size-1.5 rounded-full" style="background:#d8ff3e"></span>OpenRouter</span>
+						<a href="https://openrouter.ai/keys" target="_blank" rel="noopener" class="text-[10px] text-[var(--color-ink-faint)] underline-offset-2 hover:text-[var(--color-ink-dim)] hover:underline">get a key →</a>
+					</div>
+					<div class="flex items-center gap-2 rounded-lg border border-[var(--color-line)] bg-[var(--color-surface)] px-3 py-2 focus-within:border-[var(--color-line-hi)]">
+						<input id="api-key-openrouter" type="password" placeholder="sk-or-v1-…" autocomplete="off" spellcheck="false" class="w-full bg-transparent text-[13px] text-[var(--color-ink)] outline-none placeholder:text-[var(--color-ink-faint)]" />
+					</div>
+				</div>
+				<div>
+					<div class="mb-1 flex items-center justify-between">
+						<span class="flex items-center gap-1.5 text-[11px] text-[var(--color-ink-dim)]"><span class="size-1.5 rounded-full" style="background:#10a37f"></span>OpenAI</span>
+						<a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener" class="text-[10px] text-[var(--color-ink-faint)] underline-offset-2 hover:text-[var(--color-ink-dim)] hover:underline">get a key →</a>
+					</div>
+					<div class="flex items-center gap-2 rounded-lg border border-[var(--color-line)] bg-[var(--color-surface)] px-3 py-2 focus-within:border-[var(--color-line-hi)]">
+						<input id="api-key-openai" type="password" placeholder="sk-…" autocomplete="off" spellcheck="false" class="w-full bg-transparent text-[13px] text-[var(--color-ink)] outline-none placeholder:text-[var(--color-ink-faint)]" />
+					</div>
+				</div>
+				<div>
+					<div class="mb-1 flex items-center justify-between">
+						<span class="flex items-center gap-1.5 text-[11px] text-[var(--color-ink-dim)]"><span class="size-1.5 rounded-full" style="background:#d97757"></span>Anthropic</span>
+						<a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener" class="text-[10px] text-[var(--color-ink-faint)] underline-offset-2 hover:text-[var(--color-ink-dim)] hover:underline">get a key →</a>
+					</div>
+					<div class="flex items-center gap-2 rounded-lg border border-[var(--color-line)] bg-[var(--color-surface)] px-3 py-2 focus-within:border-[var(--color-line-hi)]">
+						<input id="api-key-anthropic" type="password" placeholder="sk-ant-…" autocomplete="off" spellcheck="false" class="w-full bg-transparent text-[13px] text-[var(--color-ink)] outline-none placeholder:text-[var(--color-ink-faint)]" />
+					</div>
+				</div>
+				<div>
+					<div class="mb-1 flex items-center justify-between">
+						<span class="flex items-center gap-1.5 text-[11px] text-[var(--color-ink-dim)]"><span class="size-1.5 rounded-full" style="background:#8b93a7"></span>Local API</span>
+						<span class="text-[10px] text-[var(--color-ink-faint)]">Ollama · LM Studio · llama.cpp…</span>
+					</div>
+					<div class="flex items-center gap-2 rounded-lg border border-[var(--color-line)] bg-[var(--color-surface)] px-3 py-2 focus-within:border-[var(--color-line-hi)]">
+						<input id="api-key-local" type="text" inputmode="url" placeholder="http://localhost:11434/v1" autocomplete="off" spellcheck="false" class="w-full bg-transparent font-mono text-[13px] text-[var(--color-ink)] outline-none placeholder:text-[var(--color-ink-faint)]" />
+					</div>
+					<p class="mt-1 text-[10px] leading-relaxed text-[var(--color-ink-faint)]">OpenAI-compatible base URL — its models are listed automatically.</p>
+				</div>
+			</div>
+			<div class="mt-4 flex items-center justify-end gap-2">
+				<button id="key-cancel" class="rounded-lg border border-[var(--color-line)] px-3.5 py-2 text-[12px] text-[var(--color-ink-dim)] transition-colors hover:text-[var(--color-ink)]">
+					Cancel
+				</button>
+				<button id="key-save" class="flex items-center gap-1.5 rounded-lg bg-[var(--color-accent)] px-3.5 py-2 text-[12px] font-medium text-black transition-opacity hover:opacity-90">
+					<svg class="size-4"><use href="#i-check"></use></svg>
+					<span>Save</span>
+				</button>
+			</div>
+		</div>
+	</div>
+
+	<!-- ============================== HISTORY DRAWER ============================== -->
+	<div id="history-drawer" class="fixed inset-0 z-50 hidden">
+		<div id="history-backdrop" class="absolute inset-0 bg-black/70 backdrop-blur-sm"></div>
+		<aside
+			id="history-panel"
+			class="absolute right-0 top-0 flex h-full w-[min(92vw,440px)] translate-x-full flex-col border-l border-[var(--color-line-hi)] bg-[var(--color-panel)] shadow-2xl transition-transform duration-300"
+		>
+			<header class="flex items-center gap-2.5 border-b border-[var(--color-line)] px-4 py-3.5">
+				<span class="grid size-8 place-items-center rounded-lg bg-[var(--color-panel-hi)] text-[var(--color-accent)]">
+					<svg class="size-4"><use href="#i-history"></use></svg>
+				</span>
+				<div class="flex-1">
+					<h2 class="text-[13px] text-[var(--color-ink)]">Battle history</h2>
+					<p class="text-[11px] text-[var(--color-ink-faint)]">stored locally in this browser</p>
+				</div>
+				<button id="history-clear" class="hidden items-center gap-1.5 rounded-md border border-[var(--color-line)] px-2 py-1.5 text-[11px] text-[var(--color-ink-faint)] transition-colors hover:border-red-500/40 hover:text-red-400">
+					<svg class="size-3.5"><use href="#i-trash"></use></svg>
+					<span>clear</span>
+				</button>
+				<button id="history-close" class="grid size-8 place-items-center rounded-md text-[var(--color-ink-faint)] transition-colors hover:bg-[var(--color-line)] hover:text-[var(--color-ink)]">
+					<svg class="size-4"><use href="#i-x"></use></svg>
+				</button>
+			</header>
+			<div id="history-list" class="flex-1 overflow-y-auto p-3"></div>
+		</aside>
+	</div>
 </Layout>
+
+<script src="../scripts/app.ts"></script>
