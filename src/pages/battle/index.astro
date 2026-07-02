@@ -1,0 +1,110 @@
+---
+import Layout from "../../layouts/Layout.astro";
+---
+
+<Layout>
+	<div class="mx-auto flex min-h-screen max-w-[1500px] flex-col px-4 sm:px-6 lg:px-8">
+		<!-- ================================ HEADER ================================ -->
+		<header class="flex items-center justify-between gap-4 py-5">
+			<a href="/" class="flex items-center gap-3 transition-opacity hover:opacity-80">
+				<span class="grid size-9 place-items-center rounded-md bg-[var(--color-accent)] text-black shadow-[0_0_24px_-4px_var(--color-accent)]">
+					<svg class="icon-fill size-5"><use href="#i-bolt"></use></svg>
+				</span>
+				<div class="leading-none">
+					<h1 class="font-pixel text-[15px] tracking-[0.12em] text-[var(--color-ink)]">AI&nbsp;BATTLE</h1>
+					<p class="mt-1 text-[10px] uppercase tracking-[0.28em] text-[var(--color-ink-faint)]">battle&nbsp;review</p>
+				</div>
+			</a>
+			<a
+				href="/"
+				class="flex items-center gap-1.5 rounded-md border border-[var(--color-line)] px-2.5 py-2 text-[11px] text-[var(--color-ink-dim)] transition-colors hover:border-[var(--color-line-hi)] hover:text-[var(--color-ink)]"
+				title="back to the arena  ·  shortcut: Esc"
+			>
+				<svg class="size-4"><use href="#i-arrow-left"></use></svg>
+				<span>back to arena</span>
+				<kbd class="hidden h-[1.05rem] items-center justify-center rounded-[4px] border border-b-2 border-[var(--color-line-hi)] bg-[var(--color-panel-hi)] px-1 font-mono text-[9px] leading-none text-[var(--color-ink-faint)] sm:inline-flex">Esc</kbd>
+			</a>
+		</header>
+
+		<!-- ============================== NOT FOUND ============================== -->
+		<div id="battle-notfound" class="hidden flex-1 place-items-center py-24 text-center">
+			<div class="flex flex-col items-center gap-4">
+				<span class="grid size-14 place-items-center rounded-2xl border border-[var(--color-line)] text-[var(--color-ink-faint)]">
+					<svg class="size-7"><use href="#i-history"></use></svg>
+				</span>
+				<div class="max-w-sm">
+					<p class="font-pixel text-[13px] tracking-[0.1em] text-[var(--color-ink-dim)]">battle not found</p>
+					<p class="mt-2 text-[12px] leading-relaxed text-[var(--color-ink-faint)]">
+						This battle isn't in your history (it lives only in the browser it was run in).
+					</p>
+					<a href="/" class="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-accent)] px-4 py-2 text-[12px] font-medium text-black transition-opacity hover:opacity-90">
+						<svg class="icon-fill size-4"><use href="#i-bolt"></use></svg>
+						<span>back to the arena</span>
+					</a>
+				</div>
+			</div>
+		</div>
+
+		<!-- ============================== BATTLE VIEW ============================== -->
+		<div id="battle-view" class="hidden flex-1 flex-col">
+			<section class="rounded-xl border border-[var(--color-line)] bg-[var(--color-panel)]/70 p-4 backdrop-blur">
+				<div class="flex items-center gap-2 text-[10px] uppercase tracking-[0.22em] text-[var(--color-ink-faint)]">
+					<svg class="size-3.5"><use href="#i-clock"></use></svg>
+					<span id="battle-when">—</span>
+				</div>
+				<p id="battle-prompt" class="mt-2 text-[14px] leading-relaxed text-[var(--color-ink)]"></p>
+
+				<div class="mt-4 flex flex-wrap items-center gap-2">
+					<!-- View mode segmented control -->
+					<div
+						id="view-controls"
+						class="inline-flex rounded-lg border border-[var(--color-line)] bg-[var(--color-surface)] p-0.5"
+						role="tablist"
+						aria-label="View mode"
+					>
+						<button data-mode="output" class="view-tab flex items-center gap-1.5 rounded-md py-1.5 pl-3 pr-2 text-[12px] text-[var(--color-ink-dim)] transition-colors" title="Output — the AI's answer  ·  shortcut: O">
+							<svg class="size-4"><use href="#i-text"></use></svg>
+							<span class="hidden sm:inline">Output</span>
+							<kbd class="hidden h-[1.05rem] min-w-[1.05rem] items-center justify-center rounded-[4px] border border-b-2 border-[var(--color-line-hi)] bg-[var(--color-surface)] px-1 font-mono text-[9px] leading-none text-[var(--color-ink-faint)] sm:inline-flex">O</kbd>
+						</button>
+						<button data-mode="code" class="view-tab flex items-center gap-1.5 rounded-md py-1.5 pl-3 pr-2 text-[12px] text-[var(--color-ink-dim)] transition-colors" title="Code — the generated source  ·  shortcut: C">
+							<svg class="size-4"><use href="#i-code"></use></svg>
+							<span class="hidden sm:inline">Code</span>
+							<kbd class="hidden h-[1.05rem] min-w-[1.05rem] items-center justify-center rounded-[4px] border border-b-2 border-[var(--color-line-hi)] bg-[var(--color-surface)] px-1 font-mono text-[9px] leading-none text-[var(--color-ink-faint)] sm:inline-flex">C</kbd>
+						</button>
+						<button data-mode="preview" class="view-tab flex items-center gap-1.5 rounded-md py-1.5 pl-3 pr-2 text-[12px] text-[var(--color-ink-dim)] transition-colors" title="Preview — live render  ·  shortcut: P">
+							<svg class="size-4"><use href="#i-browser"></use></svg>
+							<span class="hidden sm:inline">Preview</span>
+							<kbd class="hidden h-[1.05rem] min-w-[1.05rem] items-center justify-center rounded-[4px] border border-b-2 border-[var(--color-line-hi)] bg-[var(--color-surface)] px-1 font-mono text-[9px] leading-none text-[var(--color-ink-faint)] sm:inline-flex">P</kbd>
+						</button>
+					</div>
+
+					<button
+						id="scroll-link-btn"
+						class="flex items-center gap-1.5 rounded-lg border border-[var(--color-line)] bg-[var(--color-surface)] py-1.5 pl-2.5 pr-2 text-[12px] text-[var(--color-ink-dim)] transition-colors hover:text-[var(--color-ink)]"
+						title="Scroll link — scroll every result together  ·  shortcut: L"
+						aria-pressed="false"
+					>
+						<svg class="size-4"><use href="#i-link"></use></svg>
+						<span class="hidden sm:inline">Scroll link</span>
+						<kbd class="hidden h-[1.05rem] min-w-[1.05rem] items-center justify-center rounded-[4px] border border-b-2 border-[var(--color-line-hi)] bg-[var(--color-surface)] px-1 font-mono text-[9px] leading-none text-[var(--color-ink-faint)] sm:inline-flex">L</kbd>
+					</button>
+				</div>
+			</section>
+
+			<section id="results" class="grid gap-4 py-6 grid-cols-[repeat(auto-fill,minmax(22rem,1fr))]"></section>
+		</div>
+
+		<footer class="mt-auto flex items-center justify-between gap-2 border-t border-[var(--color-line)] py-4 text-[10px] uppercase tracking-[0.2em] text-[var(--color-ink-faint)]">
+			<span class="flex items-center gap-1.5">
+				<span>developed with</span>
+				<svg class="size-3.5 text-[var(--color-accent)]"><use href="#i-heart"></use></svg>
+				<span>by</span>
+				<a href="https://midu.dev" target="_blank" rel="noopener" class="text-[var(--color-ink-dim)] underline-offset-2 transition-colors hover:text-[var(--color-ink)] hover:underline">midudev</a>
+			</span>
+			<a href="/" class="hidden underline-offset-2 hover:text-[var(--color-ink-dim)] hover:underline sm:inline">back to arena</a>
+		</footer>
+	</div>
+</Layout>
+
+<script src="../../scripts/battle.ts"></script>
