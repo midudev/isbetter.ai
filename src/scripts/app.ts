@@ -62,7 +62,10 @@ interface Chunk {
 function parseOpenAIChunk(json: any): Chunk {
   const d = json.choices?.[0]?.delta || {};
   let reasoning = "";
+  // `reasoning` is OpenRouter's field; `reasoning_content` is what LM Studio,
+  // DeepSeek and vLLM stream for reasoning models (e.g. Qwen3).
   if (typeof d.reasoning === "string") reasoning = d.reasoning;
+  else if (typeof d.reasoning_content === "string") reasoning = d.reasoning_content;
   else if (Array.isArray(d.reasoning_details))
     reasoning = d.reasoning_details.map((x: any) => x?.text || x?.summary || "").join("");
   return { content: d.content || "", reasoning, usage: json.usage || null };
@@ -516,9 +519,13 @@ async function loadProviderModels(p: ProviderId) {
     return;
   }
   try {
+    // A GET carrying custom headers (Content-Type, auth…) is a non-simple
+    // request and triggers a CORS preflight. `local` servers like LM Studio
+    // don't answer OPTIONS with CORS headers, so we send a bare GET — no auth
+    // is needed to list local models anyway.
     const res = await fetch(
       modelsUrlFor(p),
-      prov.modelsNeedKey ? { headers: prov.headers(keyFor(p)) } : {},
+      prov.modelsNeedKey && p !== "local" ? { headers: prov.headers(keyFor(p)) } : {},
     );
     const json = await res.json();
     providerModels[p] = prov.parseModels(json).sort((a, b) => a.id.localeCompare(b.id));
@@ -861,7 +868,8 @@ function statsRow(entry: Entry, best: Record<string, boolean> = {}) {
   if (entry.state !== "done" && entry.state !== "streaming") return "";
   if (entry.state === "streaming") {
     // No API token counts yet — estimate from the streamed text length.
-    const out = estTokens(entry.raw);
+    // Reasoning counts too: it's generated (and timed) like any other output.
+    const out = estTokens(entry.reasoning + entry.raw);
     const now = performance.now();
     const total = now - entry.startedAt;
     const gen = entry.firstTokenAt != null ? now - entry.firstTokenAt : 0;
@@ -982,6 +990,12 @@ function flush(entry: Entry) {
   if (elapsed)
     elapsed.textContent = `${((performance.now() - entry.startedAt) / 1000).toFixed(1)}s`;
   if (entry.state !== "streaming") return;
+  const scroll = entry.el.querySelector("[data-scroll]") as HTMLElement | null;
+  // Measure BEFORE mutating content: only keep the view pinned to the bottom
+  // if the user was already there. If they scrolled up to read, leave them be.
+  const stick = scroll
+    ? scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight < 32
+    : false;
   if (entry.reasoning) {
     const rdiv = entry.el.querySelector("[data-reasoning]");
     if (rdiv) rdiv.textContent = entry.reasoning;
@@ -989,8 +1003,7 @@ function flush(entry: Entry) {
   }
   const span = entry.el.querySelector("[data-stream]");
   if (span) span.textContent = entry.raw;
-  const scroll = entry.el.querySelector("[data-scroll]") as HTMLElement | null;
-  if (scroll) scroll.scrollTop = scroll.scrollHeight;
+  if (scroll && stick) scroll.scrollTop = scroll.scrollHeight;
   const stats = entry.el.querySelector("[data-stats]");
   if (stats) stats.innerHTML = statsRow(entry);
 }
@@ -1106,7 +1119,9 @@ async function callModel(entry: Entry) {
       entry.codeFmt = formatCode(entry.code);
       entry.codeHtml = highlightCode(entry.codeFmt);
     }
-    entry.completionTokens = usage?.completion_tokens || estTokens(entry.raw);
+    // The API's completion_tokens already includes reasoning; our fallback
+    // estimate must add it too so throughput isn't understated.
+    entry.completionTokens = usage?.completion_tokens || estTokens(entry.reasoning + entry.raw);
     entry.promptTokens = usage?.prompt_tokens || entry.promptTokens;
     entry.totalTokens =
       usage?.total_tokens || entry.promptTokens + entry.completionTokens;
@@ -1235,9 +1250,21 @@ async function runBattle(force = false) {
 els.results.addEventListener("click", async (e) => {
   const btn = (e.target as HTMLElement).closest("[data-action]") as HTMLElement;
   if (!btn) return;
+  const action = btn.dataset.action;
+
+  // Restart the preview without spending tokens — just reload the iframe.
+  // Handled via DOM traversal (not the `entries` map) because this button
+  // carries the raw model id, not the composite key the map is keyed by.
+  if (action === "reload-preview") {
+    const f = btn.parentElement?.querySelector(
+      "iframe[data-preview]",
+    ) as HTMLIFrameElement | null;
+    if (f) f.srcdoc = f.srcdoc;
+    return;
+  }
+
   const entry = entries.get(btn.dataset.model!);
   if (!entry) return;
-  const action = btn.dataset.action;
 
   if (action === "copy" && entry.code) {
     await navigator.clipboard.writeText(entry.codeFmt || entry.code);
@@ -1247,10 +1274,6 @@ els.results.addEventListener("click", async (e) => {
       span.textContent = "copied";
       setTimeout(() => (span.textContent = prev), 1200);
     }
-  } else if (action === "reload-preview") {
-    // Restart the demo without spending tokens — just reload the iframe.
-    const f = entry.el.querySelector("iframe[data-preview]") as HTMLIFrameElement | null;
-    if (f) f.srcdoc = f.srcdoc;
   } else if (action === "rerun") {
     if (!keyFor(entry.provider).trim()) return openKeyModal();
     await callModel(entry);
