@@ -33,14 +33,12 @@
     "cuelume": "^0.1.0",
     "geist": "^1.7.2",
     "highlight.js": "^11.11.1",
-    "js-beautify": "^2.0.3",
     "tailwind-animations": "^1.0.1",
     "tailwindcss": "^4.3.2",
     "wrangler": "^4.110.0"
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.9",
-    "@types/js-beautify": "^1.14.3",
     "typescript": "^6.0.3",
     "vitest": "^4.1.10"
   }
