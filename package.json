@@ -12,6 +12,7 @@
     "url": "https://github.com/midudev/ai-battle/issues"
   },
   "author": "midudev (https://midu.dev)",
+  "license": "FSL-1.1-MIT",
   "packageManager": "pnpm@11.5.0",
   "engines": {
     "node": ">=22.12.0"

@@ -106,6 +106,10 @@ Everything sensitive stays client-side: API keys, prompts and battle history liv
 
 Issues and pull requests are welcome! Please use the [issue templates](.github/ISSUE_TEMPLATE) to report bugs or request features, and keep commits following the [Conventional Commits](https://www.conventionalcommits.org) style.
 
+## License
+
+[FSL-1.1-MIT](LICENSE.md) (Functional Source License). You can use, copy, modify and redistribute the code for any purpose except building a competing product. Each release automatically becomes [MIT](https://opensource.org/license/mit) two years after publication.
+
 ---
 
 Built with 💚 by [midudev](https://midu.dev) · [Keep isbetter.ai free — sponsor the project](https://github.com/sponsors/midudev)
