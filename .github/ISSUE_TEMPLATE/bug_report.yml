@@ -1,0 +1,64 @@
+name: 🐛 Bug report
+description: Something is broken in the arena
+title: "bug: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug! Please fill in as much detail as you can.
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: A clear and concise description of the bug.
+      placeholder: When I run a battle with blind mode enabled, the...
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: How can we reproduce the problem?
+      placeholder: |
+        1. Go to isbetter.ai
+        2. Add models '...'
+        3. Run a battle with prompt '...'
+        4. See error
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What did you expect to happen instead?
+    validations:
+      required: true
+  - type: dropdown
+    id: provider
+    attributes:
+      label: Affected provider(s)
+      description: If the bug is related to a specific model provider, select it.
+      multiple: true
+      options:
+        - OpenRouter
+        - OpenAI
+        - Anthropic
+        - Google Gemini
+        - xAI
+        - DeepSeek
+        - Mistral AI
+        - Groq
+        - Cerebras
+        - Local (OpenAI-compatible)
+        - Not provider-related
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and OS
+      placeholder: e.g. Chrome 138 on macOS 15
+  - type: textarea
+    id: logs
+    attributes:
+      label: Console errors or screenshots
+      description: Paste any relevant console output (F12 → Console) or drag in screenshots. Remember to redact your API keys.

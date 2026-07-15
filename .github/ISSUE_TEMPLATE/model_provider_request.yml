@@ -1,0 +1,24 @@
+name: 🤖 Model / provider request
+description: Request support for a new model provider or model brand icon
+title: "feat(providers): "
+labels: ["enhancement", "providers"]
+body:
+  - type: input
+    id: provider
+    attributes:
+      label: Provider or model
+      description: Which provider or model family should be added?
+      placeholder: e.g. Fireworks AI, Together AI, ...
+    validations:
+      required: true
+  - type: input
+    id: api-docs
+    attributes:
+      label: API documentation
+      description: Link to the provider's API docs (ideally OpenAI-compatible or SSE streaming).
+      placeholder: https://...
+  - type: textarea
+    id: notes
+    attributes:
+      label: Anything else?
+      description: Pricing endpoint, model listing endpoint, auth quirks, etc.
