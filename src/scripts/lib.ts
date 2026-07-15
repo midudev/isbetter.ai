@@ -46,17 +46,25 @@ export const estTokens = (s: string) => (s ? Math.max(1, Math.round(s.length / 4
 
 /* ----------------------------- code handling ----------------------------- */
 export function extractCode(text: string): string {
-  const blocks = [...text.matchAll(/```[a-zA-Z]*\s*\n?([\s\S]*?)```/g)].map((b) =>
-    b[1].trim(),
+  const blocks = [...text.matchAll(/```[\w+-]*[^\S\r\n]*\r?\n?([\s\S]*?)(?:```|$)/g)].map(
+    (block) => block[1].trim(),
   );
   let html = blocks.find((b) => /<!doctype html|<html[\s>]/i.test(b));
   if (!html && blocks.length) html = blocks[0];
-  if (!html && /<!doctype html|<html[\s>]/i.test(text)) html = text.trim();
+  if (!html) {
+    const start = text.search(/<!doctype html|<html[\s>]/i);
+    if (start >= 0) html = text.slice(start).trim();
+  }
   return html || "";
 }
 export function extractAnswer(text: string): string {
-  const withoutFences = text.replace(/```[a-zA-Z]*\s*\n?[\s\S]*?```/g, "").trim();
+  const withoutFences = text
+    .replace(/```[\w+-]*[^\S\r\n]*\r?\n?[\s\S]*?(?:```|$)/g, "")
+    .trim();
   return withoutFences || (extractCode(text) ? "" : text.trim());
+}
+export function hasIncompleteCodeFence(text: string): boolean {
+  return (text.match(/```/g)?.length || 0) % 2 === 1;
 }
 /* --------------------------- result rendering ---------------------------- */
 export interface ResultView {
@@ -782,6 +790,7 @@ export interface HistoryResult {
   code: string;
   state: "done" | "error";
   error: string;
+  warning?: string;
   promptTokens: number;
   completionTokens: number;
   totalTokens: number;

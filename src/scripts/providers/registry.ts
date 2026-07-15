@@ -34,7 +34,8 @@ const textFrom = (value: unknown): string => {
 
 export function parseOpenAIChunk(value: unknown): Chunk {
   const json = asObject(value);
-  const delta = asObject(json.choices?.[0]?.delta);
+  const choice = asObject(json.choices?.[0]);
+  const delta = asObject(choice.delta);
   const details = Array.isArray(delta.reasoning_details) ? delta.reasoning_details : [];
   const reasoning =
     textFrom(delta.reasoning_content) ||
@@ -44,6 +45,9 @@ export function parseOpenAIChunk(value: unknown): Chunk {
     content: textFrom(delta.content),
     reasoning,
     usage: json.usage ? (json.usage as UsageInfo) : null,
+    ...(typeof choice.finish_reason === "string"
+      ? { finishReason: choice.finish_reason }
+      : {}),
   };
 }
 
@@ -52,6 +56,7 @@ export function parseAnthropicChunk(value: unknown): Chunk {
   let content = "";
   let reasoning = "";
   let usage: UsageInfo | null = null;
+  let finishReason: string | undefined;
   if (json.type === "content_block_delta") {
     const delta = asObject(json.delta);
     if (delta.type === "text_delta") content = textFrom(delta.text);
@@ -61,10 +66,12 @@ export function parseAnthropicChunk(value: unknown): Chunk {
     const input = asObject(json.message).usage?.input_tokens;
     if (typeof input === "number") usage = { prompt_tokens: input };
   } else if (json.type === "message_delta") {
+    const delta = asObject(json.delta);
     const output = asObject(json.usage).output_tokens;
     if (typeof output === "number") usage = { completion_tokens: output };
+    if (typeof delta.stop_reason === "string") finishReason = delta.stop_reason;
   }
-  return { content, reasoning, usage };
+  return { content, reasoning, usage, ...(finishReason ? { finishReason } : {}) };
 }
 
 const OPENAI_PRICES: PriceRow[] = [
@@ -278,7 +285,7 @@ export const PROVIDERS: Record<ProviderId, Provider> = {
     }),
     body: (model, system, user) => ({
       model,
-      max_tokens: 8192,
+      max_tokens: model.toLowerCase().startsWith("claude-fable-5") ? 16384 : 8192,
       system,
       messages: [{ role: "user", content: user }],
       stream: true,

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   extractAnswer,
   extractCode,
+  hasIncompleteCodeFence,
   HISTORY_KEY,
   downsampleMetricSamples,
   loadHistory,
@@ -43,6 +44,15 @@ describe("result extraction", () => {
 
   it("keeps output readable by removing fenced source", () => {
     expect(extractAnswer(response)).toBe("A concise explanation.");
+  });
+
+  it("separates explanation from an HTML block truncated before its closing fence", () => {
+    const truncated =
+      "My approach uses accessible markup.\n\n```html\n<!doctype html><html><body>partial";
+    expect(extractAnswer(truncated)).toBe("My approach uses accessible markup.");
+    expect(extractCode(truncated)).toBe("<!doctype html><html><body>partial");
+    expect(hasIncompleteCodeFence(truncated)).toBe(true);
+    expect(hasIncompleteCodeFence(response)).toBe(false);
   });
 });
 

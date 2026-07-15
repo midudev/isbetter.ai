@@ -21,6 +21,7 @@ export interface Chunk {
   content: string;
   reasoning: string;
   usage: UsageInfo | null;
+  finishReason?: string;
 }
 
 export interface ModelInfo {

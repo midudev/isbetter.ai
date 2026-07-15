@@ -10,6 +10,7 @@ import {
   fmtCost,
   estTokens,
   extractCode,
+  hasIncompleteCodeFence,
   statsRowHTML,
   thoughtsHTML,
   doneContentHTML,
@@ -95,6 +96,7 @@ interface Entry {
   code: string; // raw extracted HTML (used for preview + open-in-tab)
   codeHtml: string; // highlighted HTML markup (used for the code view)
   error: string;
+  warning: string;
   promptTokens: number;
   completionTokens: number;
   totalTokens: number;
@@ -994,7 +996,16 @@ function contentHTML(entry: Entry): string {
     return `<div data-scroll class="result-scroll h-full overflow-auto p-3.5 text-[12px] leading-relaxed text-[var(--color-ink-dim)]">${thoughtsHTML(entry.reasoning, true)}<div class="whitespace-pre-wrap break-words"><span data-stream>${esc(entry.raw)}</span><span class="caret"></span></div></div>`;
   }
   const view = viewOf(entry);
-  const content = doneContentHTML({ ...entry, id: displayName(entry.key) }, view);
+  const resultContent = doneContentHTML({ ...entry, id: displayName(entry.key) }, view);
+  const content = entry.warning
+    ? `<div class="flex h-full min-h-0 flex-col">
+        <div role="alert" class="flex items-start gap-2 border-b border-amber-400/25 bg-amber-400/10 px-3.5 py-2.5 text-[11px] leading-relaxed text-amber-200">
+          ${svg("i-alert", "mt-0.5 size-3.5 shrink-0")}
+          <span>${esc(entry.warning)}</span>
+        </div>
+        <div class="min-h-0 flex-1">${resultContent}</div>
+      </div>`
+    : resultContent;
   const pendingPeers = [...entries.values()].filter(
     (peer) =>
       peer !== entry && (peer.state === "loading" || peer.state === "streaming"),
@@ -1085,6 +1096,7 @@ function newCard(key: string): Entry {
     code: "",
     codeHtml: "",
     error: "",
+    warning: "",
     promptTokens: 0,
     completionTokens: 0,
     totalTokens: 0,
@@ -1179,7 +1191,7 @@ async function callModel(entry: Entry) {
   entry.state = "loading";
   entry.raw = "";
   entry.reasoning = "";
-  entry.code = entry.codeHtml = entry.error = "";
+  entry.code = entry.codeHtml = entry.error = entry.warning = "";
   entry.firstTokenAt = undefined;
   entry.promptTokens = 0;
   entry.completionTokens = 0;
@@ -1252,6 +1264,7 @@ async function callModel(entry: Entry) {
     const sse = new SSEDecoder();
     let usage: UsageInfo = {};
     let streamError: string | null = null;
+    let finishReason: string | null = null;
     const processEvents = (events: SSEEvent[]): boolean => {
       for (const event of events) {
         const data = event.data.trim();
@@ -1267,6 +1280,7 @@ async function callModel(entry: Entry) {
           return true;
         }
         const parsed = prov.parse(json);
+        if (parsed.finishReason) finishReason = parsed.finishReason;
         if (parsed.reasoning || parsed.content) {
           if (entry.firstTokenAt == null) {
             entry.firstTokenAt = performance.now();
@@ -1322,6 +1336,15 @@ async function callModel(entry: Entry) {
 
     entry.state = entry.raw ? "done" : "error";
     if (!entry.raw) entry.error = streamError || "Model returned an empty response.";
+    if (entry.state === "done") {
+      if (finishReason === "max_tokens" || finishReason === "length") {
+        entry.warning =
+          "This response reached the model's output token limit and may be incomplete.";
+      } else if (hasIncompleteCodeFence(entry.raw)) {
+        entry.warning =
+          "This response appears incomplete because its code block was not closed.";
+      }
+    }
   } catch (err: unknown) {
     entry.durationMs = performance.now() - entry.startedAt;
     entry.genMs = entry.firstTokenAt != null ? performance.now() - entry.firstTokenAt : entry.durationMs;
@@ -1697,6 +1720,7 @@ function saveBattle() {
       code: e.code,
       state: e.state === "error" ? "error" : "done",
       error: e.error,
+      warning: e.warning,
       promptTokens: e.promptTokens,
       completionTokens: e.completionTokens,
       totalTokens: e.totalTokens,

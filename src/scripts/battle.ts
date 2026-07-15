@@ -145,10 +145,20 @@ async function initBattle(b: Battle) {
     const dot = v.state === "error" ? "bg-red-500" : "bg-emerald-400";
     const hasCode = v.state === "done" && !!v.code;
     const label = displayLabel(v);
-    const content =
+    const resultContent =
       v.state === "error"
         ? `<div class="grid h-full place-items-center p-5 text-center"><div class="flex flex-col items-center gap-2 text-red-400/90">${svg("i-alert", "size-6")}<span class="max-w-[24rem] text-[12px] leading-relaxed">${esc(v.error || "Request failed.")}</span></div></div>`
         : doneContentHTML({ ...v, id: label, key: keyOf(v) }, viewMode);
+    const content =
+      v.warning && v.state !== "error"
+        ? `<div class="flex h-full min-h-0 flex-col">
+            <div role="alert" class="flex items-start gap-2 border-b border-amber-400/25 bg-amber-400/10 px-3.5 py-2.5 text-[11px] leading-relaxed text-amber-200">
+              ${svg("i-alert", "mt-0.5 size-3.5 shrink-0")}
+              <span>${esc(v.warning)}</span>
+            </div>
+            <div class="min-h-0 flex-1">${resultContent}</div>
+          </div>`
+        : resultContent;
     const stats =
       v.state === "error"
         ? ""

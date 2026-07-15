@@ -24,28 +24,45 @@ describe("provider registry", () => {
       ]),
     );
     expect(PROVIDERS.google.chatUrl).toContain("/openai/chat/completions");
+    expect(PROVIDERS.anthropic.body("claude-fable-5", "", "")).toMatchObject({
+      max_tokens: 16384,
+    });
+    expect(PROVIDERS.anthropic.body("claude-opus-4-8", "", "")).toMatchObject({
+      max_tokens: 8192,
+    });
   });
 
   it("normalizes OpenAI-compatible content, reasoning and usage", () => {
     expect(
       parseOpenAIChunk({
-        choices: [{ delta: { content: "answer", reasoning_content: "thought" } }],
+        choices: [
+          {
+            delta: { content: "answer", reasoning_content: "thought" },
+            finish_reason: "length",
+          },
+        ],
         usage: { prompt_tokens: 4, completion_tokens: 2 },
       }),
     ).toEqual({
       content: "answer",
       reasoning: "thought",
       usage: { prompt_tokens: 4, completion_tokens: 2 },
+      finishReason: "length",
     });
   });
 
   it("normalizes Anthropic usage events", () => {
     expect(
-      parseAnthropicChunk({ type: "message_delta", usage: { output_tokens: 12 } }),
+      parseAnthropicChunk({
+        type: "message_delta",
+        delta: { stop_reason: "max_tokens" },
+        usage: { output_tokens: 12 },
+      }),
     ).toEqual({
       content: "",
       reasoning: "",
       usage: { completion_tokens: 12 },
+      finishReason: "max_tokens",
     });
   });
 
