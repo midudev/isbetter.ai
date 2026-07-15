@@ -370,8 +370,7 @@ function addSelection(key: string) {
 const contenderName = (key: string) =>
   (catalog.get(key)?.name || parseKey(key).id).replace(/\s*\(.*?\)\s*$/, "");
 
-// Cost estimate: catalog pricing when known (OpenRouter/known models), else the
-// built-in price table (covers custom-typed OpenAI/Anthropic ids).
+// Cost estimate: catalog pricing when known, otherwise use the built-in table.
 function costFor(entry: Entry, promptTokens: number, completionTokens: number): number | null {
   const cat = catalog.get(entry.key);
   if (cat && cat.promptPrice !== null && cat.completionPrice !== null)
@@ -495,22 +494,6 @@ function renderModelList() {
         </button>
       </li>`;
   }
-  if (
-    dropdownProvider !== "all" &&
-    qraw &&
-    !models.some(({ model }) => model.id.toLowerCase() === q)
-  ) {
-    const prov = PROVIDERS[dropdownProvider];
-    const customKey = provKey(dropdownProvider, qraw);
-    const disabled = !selected.includes(customKey) && selected.length >= MAX_CONTENDERS;
-    html += `
-      <li>
-        <button data-add="${esc(customKey)}" ${disabled ? 'disabled aria-disabled="true"' : ""} class="flex w-full items-center gap-2.5 border-t border-[var(--color-line)] px-3 py-2.5 text-left text-[var(--color-accent)] transition-colors ${disabled ? "cursor-not-allowed opacity-40" : "hover:bg-[var(--color-panel-hi)]"}">
-          ${svg("i-plus", "size-4")}
-          <span>add ${esc(prov.short)}: <span class="font-mono">${esc(qraw)}</span></span>
-        </button>
-      </li>`;
-  }
   if (!matches.length && models.length && qraw) {
     html += `<li class="px-3 py-6 text-center text-[var(--color-ink-faint)]">no matches</li>`;
   }
@@ -580,15 +563,8 @@ els.search.addEventListener("keydown", (e) => {
     return;
   }
   if (e.key === "Enter" && els.search.value.trim()) {
-    if (dropdownProvider === "all") {
-      els.list.querySelector<HTMLButtonElement>("[data-add]")?.click();
-      return;
-    }
-    const key = provKey(dropdownProvider, els.search.value.trim());
-    if (!selected.includes(key) && !addSelection(key)) return;
-    persistSelection();
-    renderChips();
-    renderModelList();
+    e.preventDefault();
+    els.list.querySelector<HTMLButtonElement>("[data-add]:not(:disabled)")?.click();
   }
 });
 els.list.addEventListener("keydown", (event) => {
