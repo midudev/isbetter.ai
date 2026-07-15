@@ -1,0 +1,66 @@
+---
+interface Props {
+	variant?: "arena" | "review";
+}
+
+const { variant = "arena" } = Astro.props;
+const arena = variant === "arena";
+---
+
+<div class="result-toolbar flex w-fit max-w-full flex-wrap items-center justify-between gap-1 rounded-xl border border-[var(--color-line)] bg-[var(--color-panel)]/90 p-1 shadow-xl backdrop-blur" aria-label="Result controls">
+	<div class="flex min-w-0 flex-1 items-center gap-1">
+		<div
+			id="view-controls"
+			class="inline-flex shrink-0"
+			role="tablist"
+			aria-label="View mode"
+		>
+			<button role="tab" aria-controls="results" data-mode="output" class="view-tab flex min-h-8 items-center gap-1.5 rounded-lg px-2.5 text-[11px] text-[var(--color-ink-dim)] transition-colors sm:px-3" title="Output · shortcut: O">
+				<svg class="size-4"><use href="#i-text"></use></svg><span class="hidden sm:inline">Output</span><kbd class="key-hint">O</kbd>
+			</button>
+			<button role="tab" aria-controls="results" data-mode="code" class="view-tab flex min-h-8 items-center gap-1.5 rounded-lg px-2.5 text-[11px] text-[var(--color-ink-dim)] transition-colors sm:px-3" title="Code · shortcut: C">
+				<svg class="size-4"><use href="#i-code"></use></svg><span class="hidden sm:inline">Code</span><kbd class="key-hint">C</kbd>
+			</button>
+			<button role="tab" aria-controls="results" data-mode="preview" class="view-tab flex min-h-8 items-center gap-1.5 rounded-lg px-2.5 text-[11px] text-[var(--color-ink-dim)] transition-colors sm:px-3" title="Preview · shortcut: P">
+				<svg class="size-4"><use href="#i-browser"></use></svg><span class="hidden sm:inline">Preview</span><kbd class="key-hint">P</kbd>
+			</button>
+		</div>
+
+		<button
+			id="scroll-link-btn"
+			class="flex min-h-8 items-center gap-1.5 rounded-lg px-2.5 text-[11px] text-[var(--color-ink-dim)] transition-colors hover:bg-[var(--color-panel-hi)] hover:text-[var(--color-ink)]"
+			title="Scroll every result together · shortcut: L"
+			aria-pressed="false"
+		>
+			<svg class="size-4"><use href="#i-link"></use></svg>
+			<span class="hidden lg:inline">Sync scroll</span>
+			<kbd class="key-hint">L</kbd>
+			<span id="scroll-link-check" class="hidden size-4 place-items-center rounded border border-[var(--color-line-hi)] text-transparent" aria-hidden="true">
+				<svg class="size-3"><use href="#i-check"></use></svg>
+			</span>
+		</button>
+
+		<button
+			id="reveal-models-btn"
+			class="hidden min-h-9 items-center gap-1.5 rounded-lg border border-[var(--color-accent)]/40 bg-[var(--color-accent)]/10 px-3 text-[12px] text-[var(--color-accent)] transition-colors hover:bg-[var(--color-accent)]/15"
+			title="Reveal model identities"
+		>
+			<svg class="size-4"><use href="#i-eye"></use></svg>
+			<span>Reveal</span>
+		</button>
+	</div>
+
+	{arena && (
+		<div class="ml-auto flex items-center gap-1">
+			<span id="battle-status" class="hidden text-[11px] tabular-nums text-[var(--color-ink-dim)]" role="status" aria-live="polite"></span>
+			<button
+				id="rerun-all-btn"
+				aria-label="Re-run every model"
+				class="hidden size-8 place-items-center rounded-lg text-[var(--color-ink-dim)] transition-colors hover:bg-[var(--color-panel-hi)] hover:text-[var(--color-ink)] [&:not(.hidden)]:grid"
+				title="Re-run every model from scratch"
+			>
+				<svg class="size-4"><use href="#i-refresh"></use></svg>
+			</button>
+		</div>
+	)}
+</div>

@@ -1,0 +1,58 @@
+---
+interface Props {
+	variant?: "arena" | "review";
+}
+
+const { variant = "arena" } = Astro.props;
+const review = variant === "review";
+---
+
+<header class:list={["flex min-h-14 items-center gap-3 py-2.5", review ? "justify-between" : "justify-end"]}>
+	{review && (
+		<a href="/" class="group flex min-w-0 items-center gap-3" aria-label="AI Battle home">
+			<span class="grid size-9 shrink-0 place-items-center rounded-[0.65rem] border border-[var(--color-accent)]/20 bg-[var(--color-accent)]/[0.06] transition-colors group-hover:border-[var(--color-accent)]/40">
+				<img src="/favicon.svg" alt="" class="size-5" />
+			</span>
+			<p class="truncate text-[14px] font-semibold tracking-[-0.02em] text-[var(--color-ink)] sm:text-[15px]">
+				Battle review
+			</p>
+		</a>
+	)}
+
+	{review ? (
+		<a
+			href="/"
+			class="control-surface flex min-h-9 items-center gap-2 px-3 text-[11px]"
+			title="Back to the arena · shortcut: Esc"
+		>
+			<svg class="size-4"><use href="#i-arrow-left"></use></svg>
+			<span>Back to arena</span>
+				<kbd class="key-hint">Esc</kbd>
+		</a>
+	) : (
+		<nav class="flex items-center gap-1.5 sm:gap-2" aria-label="Workspace">
+			<button
+				id="history-btn"
+				aria-label="Open battle history"
+				class="control-surface relative flex min-h-9 items-center gap-2 px-2.5 text-[11px] sm:px-3"
+				title="Battle history · shortcut: H"
+			>
+				<svg class="size-4"><use href="#i-history"></use></svg>
+				<span class="hidden sm:inline">History</span>
+				<span id="history-count" class="hidden min-w-[1.2rem] rounded-md bg-[var(--color-panel-hi)] px-1.5 py-0.5 text-center text-[10px]">0</span>
+				<kbd class="key-hint">H</kbd>
+			</button>
+			<button
+				id="key-btn"
+				aria-label="Configure API keys"
+				class="control-surface relative flex min-h-9 items-center gap-2 px-2.5 text-[11px] sm:px-3"
+				title="Configure provider API keys · shortcut: K"
+			>
+				<svg class="size-4"><use href="#i-key"></use></svg>
+				<span id="key-label" class="hidden xs:inline sm:inline">API keys</span>
+				<span id="key-dot" class="size-1.5 rounded-full bg-[var(--color-accent)]" aria-hidden="true"></span>
+				<kbd class="key-hint">K</kbd>
+			</button>
+		</nav>
+	)}
+</header>

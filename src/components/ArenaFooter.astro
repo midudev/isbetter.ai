@@ -1,0 +1,30 @@
+---
+interface Props {
+	review?: boolean;
+}
+
+const { review = false } = Astro.props;
+---
+
+<footer class="mt-auto flex flex-col items-start gap-3 border-t border-[var(--color-line)] py-5 text-[11px] text-[var(--color-ink-faint)] sm:flex-row sm:items-center sm:justify-between">
+	<span class="flex items-center gap-1.5">
+		<span>Built with</span>
+		<svg class="size-3.5 text-[var(--color-accent)]"><use href="#i-heart"></use></svg>
+		<a href="https://midu.dev" target="_blank" rel="noopener" class="text-[var(--color-ink-dim)] underline-offset-2 transition-colors hover:text-[var(--color-ink)] hover:underline">midudev</a>
+	</span>
+	<div class="flex flex-wrap items-center gap-x-4 gap-y-2 sm:justify-end">
+		<a
+			href="https://github.com/sponsors/midudev"
+			target="_blank"
+			rel="noopener"
+			class="text-[var(--color-accent)] underline-offset-2 transition-opacity hover:underline hover:opacity-80"
+		>
+			Keep AI Battle free
+		</a>
+		{review ? (
+			<a href="/" class="hidden border-l border-[var(--color-line-hi)] pl-4 underline-offset-2 hover:text-[var(--color-ink-dim)] hover:underline lg:inline">Back to arena</a>
+		) : (
+			<span class="hidden border-l border-[var(--color-line-hi)] pl-4 lg:inline">Keys and prompts stay in your browser</span>
+		)}
+	</div>
+</footer>
