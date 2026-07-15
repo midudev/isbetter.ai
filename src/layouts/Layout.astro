@@ -3,6 +3,25 @@ import "../styles/global.css";
 import IconSprite from "../components/IconSprite.astro";
 
 const canonicalUrl = new URL(Astro.url.pathname, Astro.site);
+const title = "Compare AI Models Side by Side — isbetter.ai";
+const description =
+	"Compare AI models side by side using the same prompt. Evaluate outputs, generated code, live previews, speed, tokens and cost.";
+const socialTitle = "Compare AI Models Side by Side";
+const socialDescription =
+	"Run the same prompt across multiple AI models and compare output quality, code, speed, tokens and cost.";
+const socialImage = new URL("/og-image.png", Astro.site);
+const socialImageAlt =
+	"isbetter.ai comparing GPT, Claude and Gemini results side by side";
+const structuredData = {
+	"@context": "https://schema.org",
+	"@type": "WebApplication",
+	name: "isbetter.ai",
+	url: new URL("/", Astro.site).toString(),
+	description,
+	applicationCategory: "DeveloperApplication",
+	operatingSystem: "Any",
+	image: socialImage.toString(),
+};
 ---
 
 <!doctype html>
@@ -12,23 +31,33 @@ const canonicalUrl = new URL(Astro.url.pathname, Astro.site);
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<meta name="theme-color" content="#080a08" />
 		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+		<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+		<link rel="manifest" href="/site.webmanifest" />
 		<link rel="canonical" href={canonicalUrl} />
 		<meta name="generator" content={Astro.generator} />
-		<meta
-			name="description"
-			content="Compare AI models side by side using the same prompt. Evaluate outputs, generated code, live previews, speed, tokens and cost."
-		/>
+		<meta name="description" content={description} />
 		<meta name="robots" content="index, follow" />
 		<meta property="og:type" content="website" />
+		<meta property="og:locale" content="en_US" />
 		<meta property="og:site_name" content="isbetter.ai" />
 		<meta property="og:url" content={canonicalUrl} />
-		<meta property="og:title" content="Compare AI Models Side by Side" />
-		<meta property="og:description" content="Run the same prompt across multiple AI models and compare output quality, code, speed, tokens and cost." />
-		<meta property="og:image" content="/favicon.svg" />
-		<meta name="twitter:card" content="summary" />
-		<meta name="twitter:title" content="Compare AI Models Side by Side" />
-		<meta name="twitter:description" content="Compare AI model outputs, generated code, live previews, speed, tokens and cost." />
-		<title>Compare AI Models Side by Side — isbetter.ai</title>
+		<meta property="og:title" content={socialTitle} />
+		<meta property="og:description" content={socialDescription} />
+		<meta property="og:image" content={socialImage} />
+		<meta property="og:image:secure_url" content={socialImage} />
+		<meta property="og:image:type" content="image/png" />
+		<meta property="og:image:width" content="1200" />
+		<meta property="og:image:height" content="630" />
+		<meta property="og:image:alt" content={socialImageAlt} />
+		<meta name="twitter:card" content="summary_large_image" />
+		<meta name="twitter:site" content="@midudev" />
+		<meta name="twitter:creator" content="@midudev" />
+		<meta name="twitter:title" content={socialTitle} />
+		<meta name="twitter:description" content={socialDescription} />
+		<meta name="twitter:image" content={socialImage} />
+		<meta name="twitter:image:alt" content={socialImageAlt} />
+		<script is:inline type="application/ld+json" set:html={JSON.stringify(structuredData)} />
+		<title>{title}</title>
 	</head>
 	<body class="grid-bg">
 		<IconSprite />
