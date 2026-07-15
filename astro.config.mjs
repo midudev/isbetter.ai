@@ -6,7 +6,7 @@ import tailwindcss from '@tailwindcss/vite';
 
 // https://astro.build/config
 export default defineConfig({
-  site: 'https://letscompare.ai',
+  site: 'https://isbetter.ai',
   adapter: cloudflare(),
   vite: {
     plugins: [tailwindcss()]
