@@ -25,7 +25,7 @@ import {
   downsampleMetricSamples,
   installMetricTooltips,
   installTimelineTracking,
-  providerBadge,
+  modelBadge,
   type Battle,
   type HistoryResult,
   type MetricSample,
@@ -72,6 +72,7 @@ const OR_DEFAULTS = [
   "google/gemini-3.5-flash",
   "deepseek/deepseek-chat-v3.1",
 ];
+const MAX_CONTENDERS = 6;
 const BRAND_KEYWORDS = ["claude", "openai/gpt", "gemini", "deepseek", "grok", "llama"];
 const SKIP_VARIANT = /image|audio|tts|embed|video|vision|moderation|guard|free/i;
 
@@ -159,7 +160,18 @@ let revealed = !blindMode;
 let blindOrder: string[] = [];
 const blindAliases = new Map<string, string>();
 let systemPrompt = localStorage.getItem(LS.system) || DEFAULT_SYSTEM_PROMPT;
-let selected: string[] = JSON.parse(localStorage.getItem(LS.models) || "[]"); // composite keys
+let selected: string[] = (() => {
+  try {
+    const stored = JSON.parse(localStorage.getItem(LS.models) || "[]");
+    if (!Array.isArray(stored)) return [];
+    return [...new Set(stored.filter((key): key is string => typeof key === "string"))].slice(
+      0,
+      MAX_CONTENDERS,
+    );
+  } catch {
+    return [];
+  }
+})(); // composite keys
 const providerModels = Object.fromEntries(
   PROVIDER_IDS.map((provider) => [provider, [] as ModelInfo[]]),
 ) as Record<ProviderId, ModelInfo[]>;
@@ -195,15 +207,19 @@ const els = {
   sysText: $<HTMLTextAreaElement>("#system-prompt"),
   sysReset: $("#sys-reset"),
   prompt: $<HTMLTextAreaElement>("#prompt"),
+  promptShell: $("#prompt-shell"),
+  promptError: $("#prompt-error"),
   promptExamples: $("#prompt-examples"),
   runBtn: $<HTMLButtonElement>("#run-btn"),
   rerunAllBtn: $<HTMLButtonElement>("#rerun-all-btn"),
   runLabel: $("#run-label"),
   runIcon: $("#run-icon"),
+  runShortcut: $("#run-shortcut"),
   viewControls: $("#view-controls"),
   scrollBtn: $("#scroll-link-btn"),
   scrollCheck: $("#scroll-link-check"),
   blindBtn: $<HTMLButtonElement>("#blind-mode-btn"),
+  blindIcon: $("#blind-mode-icon"),
   blindCheck: $("#blind-mode-check"),
   revealBtn: $<HTMLButtonElement>("#reveal-models-btn"),
   status: $("#battle-status"),
@@ -216,6 +232,7 @@ const els = {
   shareStatus: $("#share-status"),
   results: $("#results"),
   empty: $("#empty-state"),
+  resultsToolbarWrap: $("#results-toolbar-wrap"),
   historyBtn: $("#history-btn"),
   historyCount: $("#history-count"),
   historyDrawer: $("#history-drawer"),
@@ -298,7 +315,7 @@ async function loadProviderModels(p: ProviderId) {
     // is needed to list local models anyway.
     const res = await fetch(
       modelsUrlFor(p),
-      prov.modelsNeedKey && p !== "local" ? { headers: prov.headers(keyFor(p)) } : {},
+      p !== "local" ? { headers: prov.headers(keyFor(p)) } : {},
     );
     if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
     const json = await res.json();
@@ -351,6 +368,12 @@ function persistSelection() {
   localStorage.setItem(LS.models, JSON.stringify(selected));
 }
 
+function addSelection(key: string) {
+  if (selected.includes(key) || selected.length >= MAX_CONTENDERS) return false;
+  selected.push(key);
+  return true;
+}
+
 const contenderName = (key: string) =>
   (catalog.get(key)?.name || parseKey(key).id).replace(/\s*\(.*?\)\s*$/, "");
 
@@ -373,15 +396,23 @@ function priceLabel(m: ModelInfo) {
 
 function renderChips() {
   els.count.textContent = String(selected.length);
+  const limitReached = selected.length >= MAX_CONTENDERS;
+  els.addBtn.title = limitReached
+    ? `Maximum of ${MAX_CONTENDERS} models selected`
+    : "add model · shortcut: M";
+  els.addBtn.setAttribute(
+    "aria-label",
+    limitReached ? `Model limit reached (${MAX_CONTENDERS})` : "Add model",
+  );
   [...els.chips.querySelectorAll(".model-chip")].forEach((n) => n.remove());
   const frag = document.createDocumentFragment();
   for (const key of selected) {
-    const { provider } = parseKey(key);
+    const { provider, id } = parseKey(key);
     const chip = document.createElement("div");
     chip.className =
-      "model-chip group flex items-center gap-1.5 rounded-lg border border-[var(--color-line-hi)] bg-[var(--color-panel-hi)] py-1.5 pl-2 pr-1.5 text-[12px] text-[var(--color-ink)]";
+      "model-chip group flex min-h-10 items-center gap-1.5 rounded-xl border border-[var(--color-line-hi)] bg-[var(--color-panel-hi)] py-1.5 pl-2.5 pr-1.5 text-[12px] font-medium text-[var(--color-ink)] shadow-sm";
     chip.innerHTML = `
-      ${providerBadge(provider)}
+      ${modelBadge(provider, id)}
       <span class="max-w-[13rem] truncate" title="${esc(key)}">${esc(contenderName(key))}</span>
       <button data-remove="${esc(key)}" class="grid size-5 place-items-center rounded text-[var(--color-ink-faint)] transition-colors hover:bg-[var(--color-line)] hover:text-[var(--color-ink)]" title="remove">
         ${svg("i-x", "size-3.5")}
@@ -409,6 +440,7 @@ function renderModelList() {
     t.classList.toggle("bg-[var(--color-panel-hi)]", on);
     t.classList.toggle("text-[var(--color-ink-faint)]", !on);
     t.setAttribute("aria-selected", String(on));
+    t.tabIndex = on ? 0 : -1;
   });
 
   const q = els.search.value.trim().toLowerCase();
@@ -452,16 +484,17 @@ function renderModelList() {
   for (const { provider, model: m } of matches) {
     const key = provKey(provider, m.id);
     const on = selected.includes(key);
+    const disabled = !on && selected.length >= MAX_CONTENDERS;
     const price = priceLabel(m);
     html += `
       <li>
-        <button role="option" aria-selected="${on}" data-add="${esc(key)}" class="flex w-full items-start gap-2.5 px-3 py-2 text-left transition-colors hover:bg-[var(--color-panel-hi)]">
+        <button role="option" aria-selected="${on}" data-add="${esc(key)}" ${disabled ? 'disabled aria-disabled="true"' : ""} class="flex w-full items-start gap-2.5 px-3 py-2 text-left transition-colors ${disabled ? "cursor-not-allowed opacity-40" : "hover:bg-[var(--color-panel-hi)]"}">
           <span class="mt-0.5 grid size-4 shrink-0 place-items-center rounded border ${on ? "border-[var(--color-accent)] bg-[var(--color-accent)] text-black" : "border-[var(--color-line-hi)] text-transparent"}">
             ${svg("i-check", "size-3")}
           </span>
           <span class="min-w-0 flex-1">
             <span class="flex items-center gap-1.5">
-              ${dropdownProvider === "all" ? providerBadge(provider) : ""}
+              ${modelBadge(provider, m.id)}
               <span class="block min-w-0 truncate text-[var(--color-ink)]">${esc(m.name)}</span>
             </span>
             <span class="mt-0.5 block truncate font-mono text-[10px] text-[var(--color-ink-faint)]">${esc(m.id)}${price ? " · " + price : ""}</span>
@@ -475,9 +508,11 @@ function renderModelList() {
     !models.some(({ model }) => model.id.toLowerCase() === q)
   ) {
     const prov = PROVIDERS[dropdownProvider];
+    const customKey = provKey(dropdownProvider, qraw);
+    const disabled = !selected.includes(customKey) && selected.length >= MAX_CONTENDERS;
     html += `
       <li>
-        <button data-add="${esc(provKey(dropdownProvider, qraw))}" class="flex w-full items-center gap-2.5 border-t border-[var(--color-line)] px-3 py-2.5 text-left text-[var(--color-accent)] transition-colors hover:bg-[var(--color-panel-hi)]">
+        <button data-add="${esc(customKey)}" ${disabled ? 'disabled aria-disabled="true"' : ""} class="flex w-full items-center gap-2.5 border-t border-[var(--color-line)] px-3 py-2.5 text-left text-[var(--color-accent)] transition-colors ${disabled ? "cursor-not-allowed opacity-40" : "hover:bg-[var(--color-panel-hi)]"}">
           ${svg("i-plus", "size-4")}
           <span>add ${esc(prov.short)}: <span class="font-mono">${esc(qraw)}</span></span>
         </button>
@@ -495,7 +530,7 @@ els.list.addEventListener("click", (e) => {
   if (!btn) return;
   const key = btn.dataset.add!;
   if (selected.includes(key)) selected = selected.filter((k) => k !== key);
-  else selected.push(key);
+  else if (!addSelection(key)) return;
   persistSelection();
   renderChips();
   renderModelList();
@@ -510,6 +545,21 @@ els.dropdown.addEventListener("click", (e) => {
   if (dropdownProvider !== "all" && !loadedProviders.has(dropdownProvider))
     loadProviderModels(dropdownProvider);
   renderModelList();
+});
+els.dropdown.addEventListener("keydown", (event) => {
+  const tab = (event.target as HTMLElement).closest<HTMLElement>("[data-provtab]");
+  if (!tab || !["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+  const tabs = [...els.dropdown.querySelectorAll<HTMLElement>("[data-provtab]")];
+  const current = tabs.indexOf(tab);
+  event.preventDefault();
+  const next =
+    event.key === "Home"
+      ? 0
+      : event.key === "End"
+        ? tabs.length - 1
+        : (current + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
+  tabs[next].focus();
+  tabs[next].click();
 });
 
 function toggleDropdown(open?: boolean) {
@@ -527,17 +577,44 @@ function toggleDropdown(open?: boolean) {
 els.addBtn.addEventListener("click", () => toggleDropdown());
 els.search.addEventListener("input", renderModelList);
 els.search.addEventListener("keydown", (e) => {
+  if (e.key === "ArrowDown") {
+    e.preventDefault();
+    els.list
+      .querySelector<HTMLButtonElement>(
+        "[data-add]:not(:disabled), [data-openkeys]:not(:disabled)",
+      )
+      ?.focus();
+    return;
+  }
   if (e.key === "Enter" && els.search.value.trim()) {
     if (dropdownProvider === "all") {
       els.list.querySelector<HTMLButtonElement>("[data-add]")?.click();
       return;
     }
     const key = provKey(dropdownProvider, els.search.value.trim());
-    if (!selected.includes(key)) selected.push(key);
+    if (!selected.includes(key) && !addSelection(key)) return;
     persistSelection();
     renderChips();
     renderModelList();
   }
+});
+els.list.addEventListener("keydown", (event) => {
+  if (!["ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return;
+  const options = [
+    ...els.list.querySelectorAll<HTMLButtonElement>(
+      "[data-add]:not(:disabled), [data-openkeys]:not(:disabled)",
+    ),
+  ];
+  const current = options.indexOf(document.activeElement as HTMLButtonElement);
+  if (!options.length || current < 0) return;
+  event.preventDefault();
+  const next =
+    event.key === "Home"
+      ? 0
+      : event.key === "End"
+        ? options.length - 1
+        : (current + (event.key === "ArrowDown" ? 1 : -1) + options.length) % options.length;
+  options[next].focus();
 });
 document.addEventListener("click", (e) => {
   if (!els.addWrap.contains(e.target as Node)) toggleDropdown(false);
@@ -548,8 +625,9 @@ document.addEventListener("click", (e) => {
 /* ===================================================================== */
 els.sysText.value = systemPrompt;
 els.sysToggle.addEventListener("click", () => {
-  const open = els.sysPanel.classList.toggle("hidden");
-  els.sysChevron.style.transform = open ? "" : "rotate(-90deg)";
+  const hidden = els.sysPanel.classList.toggle("hidden");
+  els.sysChevron.style.transform = hidden ? "rotate(-90deg)" : "";
+  els.sysToggle.setAttribute("aria-expanded", String(!hidden));
 });
 els.sysChevron.style.transform = "rotate(-90deg)";
 els.sysText.addEventListener("input", () => {
@@ -656,6 +734,7 @@ function setBlindOrder(order: string[]) {
 }
 
 function refreshBlindUI() {
+  els.blindIcon.setAttribute("href", blindMode ? "#i-eye-off" : "#i-eye");
   els.blindBtn.classList.toggle("border-[var(--color-accent)]", blindMode);
   els.blindBtn.classList.toggle("text-[var(--color-accent)]", blindMode);
   els.blindBtn.classList.toggle("text-[var(--color-ink-dim)]", !blindMode);
@@ -703,14 +782,38 @@ els.revealBtn.addEventListener("click", () => {
   }
   refreshBlindUI();
   rerenderIdentities();
+  els.status.textContent = "Model identities revealed";
+  els.status.classList.remove("hidden");
+  setTimeout(() => {
+    if (!running) els.status.classList.add("hidden");
+  }, 2200);
 });
 
 /* ===================================================================== */
 /*  PROMPT + RUN button enablement                                       */
 /* ===================================================================== */
+function syncPromptExamples() {
+  const visible = els.prompt.value.length === 0;
+  els.promptExamples.classList.toggle("opacity-100", visible);
+  els.promptExamples.classList.toggle("translate-y-0", visible);
+  els.promptExamples.classList.toggle("pointer-events-none", !visible);
+  els.promptExamples.classList.toggle("translate-y-1", !visible);
+  els.promptExamples.classList.toggle("opacity-0", !visible);
+  els.promptExamples.toggleAttribute("inert", !visible);
+  els.promptExamples.setAttribute("aria-hidden", String(!visible));
+}
+
 els.prompt.value = localStorage.getItem(LS.prompt) || "";
+syncPromptExamples();
 els.prompt.addEventListener("input", () => {
   localStorage.setItem(LS.prompt, els.prompt.value);
+  const valid = els.prompt.value.trim().length > 0;
+  if (valid) {
+    els.promptShell.classList.remove("validation-error");
+    els.promptError.classList.add("hidden");
+    els.prompt.removeAttribute("aria-invalid");
+  }
+  syncPromptExamples();
   syncRunBtn();
 });
 els.promptExamples.addEventListener("click", (event) => {
@@ -724,14 +827,36 @@ els.promptExamples.addEventListener("click", (event) => {
 });
 function syncRunBtn() {
   // Keep Run clickable so a first-time visitor can press it and be guided to
-  // add their key / write a prompt (see runBattle). Only block it mid-run.
+  // complete the next required step (see runBattle). Only block it mid-run.
   els.runBtn.disabled = running;
+  if (!running) {
+    const needsKey = !anyKey();
+    const needsModel = !selected.length;
+    const label = needsKey
+      ? "Add key to start"
+      : needsModel
+        ? "Select model to start"
+        : "Run battle";
+    const icon = needsKey ? "#i-key" : needsModel ? "#i-plus" : "#i-play";
+    els.runLabel.textContent = label;
+    els.runIcon.innerHTML = `<use href="${icon}"></use>`;
+    els.runShortcut.textContent = needsKey ? "K" : needsModel ? "M" : "⌘↵";
+    els.runBtn.setAttribute("aria-label", label);
+  }
   els.rerunAllBtn.disabled = running;
   els.blindBtn.disabled = running;
   // "Re-run all" only matters once there are results to refresh.
   els.rerunAllBtn.classList.toggle("hidden", entries.size === 0);
 }
-els.runBtn.addEventListener("click", () => runBattle());
+els.runBtn.addEventListener("click", (event) => {
+  // Keep the guided model picker open when this outside click triggers it.
+  if (anyKey() && !selected.length) {
+    event.stopPropagation();
+    toggleDropdown(true);
+    return;
+  }
+  runBattle();
+});
 els.rerunAllBtn.addEventListener("click", () => runBattle(true));
 
 /* ===================================================================== */
@@ -888,11 +1013,12 @@ function renderCard(entry: Entry, best: Record<string, boolean> = {}) {
   const concealed = isConcealed();
   const name = displayName(entry.key);
   entry.el.innerHTML = `
-    <div class="flex items-center gap-2 px-3 py-2.5">
-      <span class="size-2 shrink-0 rounded-full ${dotColor(entry.state)}"></span>
-      ${concealed ? "" : providerBadge(entry.provider)}
-      <span class="min-w-0 flex-1 truncate text-[12px] text-[var(--color-ink)]"${concealed ? "" : ` title="${esc(entry.key)}"`}>${esc(name)}</span>
-      ${entry.cached ? `<span class="rounded border border-[var(--color-line)] px-1 py-0.5 text-[8px] uppercase text-[var(--color-ink-faint)]">cached</span>` : ""}
+    <div class="flex min-h-12 items-center gap-2 border-b border-[var(--color-line)] px-3.5 py-2.5">
+      <span class="size-2 shrink-0 rounded-full ${dotColor(entry.state)}" aria-hidden="true"></span>
+      <span class="sr-only">${entry.state}</span>
+      ${concealed ? "" : modelBadge(entry.provider, entry.id)}
+      <span class="min-w-0 flex-1 truncate text-[12px] font-medium text-[var(--color-ink)]"${concealed ? "" : ` title="${esc(entry.key)}"`}>${esc(name)}</span>
+      ${entry.cached ? `<span class="rounded-md border border-[var(--color-line)] px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-[var(--color-ink-faint)]">cached</span>` : ""}
       ${
         hasCode
           ? `<button data-action="open" data-model="${esc(entry.key)}" aria-label="Open preview in a new tab" class="grid size-7 place-items-center rounded-md text-[var(--color-ink-faint)] transition-colors hover:bg-[var(--color-line)] hover:text-[var(--color-ink)]" title="open preview in new tab">${svg("i-expand", "size-4")}</button>`
@@ -900,8 +1026,8 @@ function renderCard(entry: Entry, best: Record<string, boolean> = {}) {
       }
       <button data-action="rerun" data-model="${esc(entry.key)}" aria-label="Re-run ${esc(name)}" ${entry.state === "loading" || entry.state === "streaming" ? "disabled" : ""} class="grid size-7 place-items-center rounded-md text-[var(--color-ink-faint)] transition-colors hover:bg-[var(--color-line)] hover:text-[var(--color-ink)] disabled:cursor-not-allowed disabled:opacity-40" title="re-run this model">${svg("i-refresh", "size-4")}</button>
     </div>
-    <div data-stats>${statsRow(entry, best)}</div>
-    <div data-content class="h-[clamp(22rem,52vh,42rem)] border-t border-[var(--color-line)] bg-[var(--color-surface)]"></div>`;
+    <div data-stats class="bg-[var(--color-panel)]">${statsRow(entry, best)}</div>
+    <div data-content class="h-[clamp(20rem,50vh,38rem)] bg-[var(--color-surface)]"></div>`;
   renderContent(entry);
 }
 
@@ -912,7 +1038,7 @@ function newCard(key: string): Entry {
   const { provider, id } = parseKey(key);
   const el = document.createElement("article");
   el.className =
-    "result-card flex flex-col overflow-hidden rounded-xl border border-[var(--color-line)] bg-[var(--color-panel)]";
+    "result-card flex flex-col overflow-hidden rounded-2xl border border-[var(--color-line)] bg-[var(--color-panel)]";
   el.dataset.card = key;
   const entry: Entry = {
     id,
@@ -1215,7 +1341,7 @@ function summaryEntries() {
 function refreshProgress() {
   const all = [...entries.values()];
   const complete = all.filter((entry) => entry.state === "done" || entry.state === "error").length;
-  els.status.textContent = running ? `${complete}/${all.length} complete` : "";
+  els.status.textContent = running ? `${complete} of ${all.length} complete` : "";
   els.status.classList.toggle("hidden", !running);
 }
 
@@ -1289,11 +1415,18 @@ async function runBattle(force = false) {
   if (!neededProviders.every((p) => keyFor(p).trim())) return openKeyModal();
   const prompt = els.prompt.value.trim();
   if (!prompt) {
+    els.promptShell.classList.add("validation-error");
+    els.promptError.classList.remove("hidden");
+    els.prompt.setAttribute("aria-invalid", "true");
     els.prompt.focus();
     return;
   }
+  els.promptShell.classList.remove("validation-error");
+  els.promptError.classList.add("hidden");
+  els.prompt.removeAttribute("aria-invalid");
 
   els.empty.classList.add("hidden");
+  els.resultsToolbarWrap.classList.remove("hidden");
   currentBattleId = null;
   resetSharePanel();
   const runOrder = blindMode ? shuffled(selected) : [...selected];
@@ -1347,6 +1480,7 @@ async function runBattle(force = false) {
   }
 
   running = true;
+  els.results.setAttribute("aria-busy", "true");
   syncRunBtn();
   if (!reused) setView("output"); // full run: jump to Output to watch streaming
   els.runLabel.textContent = "Running…";
@@ -1357,6 +1491,7 @@ async function runBattle(force = false) {
   await runWithConcurrency(toRun, 3, callModel);
 
   running = false;
+  els.results.setAttribute("aria-busy", "false");
   if (toRun.some((entry) => entry.state === "done")) play("success");
   els.runLabel.textContent = "Run battle";
   els.runIcon.innerHTML = `<use href="#i-play"></use>`;
@@ -1585,7 +1720,7 @@ function renderHistory() {
         .map(
           (r) => `
         <span class="inline-flex items-center gap-1 rounded border border-[var(--color-line)] px-1.5 py-0.5 text-[10px] ${r.state === "error" ? "text-red-400/80" : "text-[var(--color-ink-dim)]"}">
-          ${!concealed && r.provider ? providerBadge(r.provider) : `<span class="size-1 rounded-full ${r.state === "error" ? "bg-red-500" : "bg-emerald-400"}"></span>`}${lbl(r)}
+          ${!concealed && r.provider ? modelBadge(r.provider, r.id) : `<span class="size-1 rounded-full ${r.state === "error" ? "bg-red-500" : "bg-emerald-400"}"></span>`}${lbl(r)}
         </span>`,
         )
         .join("");
@@ -1619,11 +1754,13 @@ function renderHistory() {
 }
 
 function deleteBattle(id: string) {
+  if (!window.confirm("Delete this battle from local history?")) return;
   history = history.filter((b) => battleId(b) !== id);
   persistHistory();
   renderHistory();
 }
 function clearHistory() {
+  if (!window.confirm("Clear every saved battle from this browser?")) return;
   history = [];
   persistHistory();
   renderHistory();

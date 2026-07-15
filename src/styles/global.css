@@ -27,16 +27,17 @@
   --font-pixel: "Geist Pixel", "Geist Mono", monospace;
   --font-pixel-line: "Geist Pixel Line", "Geist Mono", monospace;
   --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, monospace;
+  --font-sans: "Geist", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 
-  --color-ink: #ededed;
-  --color-ink-dim: #a1a1a1;
-  --color-ink-faint: #858585;
-  --color-surface: #0a0a0a;
-  --color-panel: #0f0f0f;
-  --color-panel-hi: #161616;
-  --color-line: rgba(255, 255, 255, 0.09);
-  --color-line-hi: rgba(255, 255, 255, 0.16);
-  --color-accent: #d8ff3e;
+  --color-ink: #f4f5f2;
+  --color-ink-dim: #b6bbb0;
+  --color-ink-faint: #7f867a;
+  --color-surface: #080a08;
+  --color-panel: #0e110e;
+  --color-panel-hi: #171b16;
+  --color-line: rgba(255, 255, 255, 0.1);
+  --color-line-hi: rgba(255, 255, 255, 0.2);
+  --color-accent: #d7ff3f;
 }
 
 /* --------------------------------- Globals -------------------------------- */
@@ -48,9 +49,10 @@
     min-height: 100%;
     background: var(--color-surface);
     color: var(--color-ink);
-    font-family: var(--font-mono);
+    font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
+    color-scheme: dark;
   }
 
   ::selection {
@@ -60,7 +62,7 @@
 
   :focus-visible {
     outline: 2px solid var(--color-accent);
-    outline-offset: 2px;
+    outline-offset: 3px;
   }
 
   /* Tabler icon defaults. Presentation attrs on a <g> inside <defs> do NOT
@@ -94,6 +96,193 @@
   }
   *::-webkit-scrollbar-track {
     background: transparent;
+  }
+}
+
+@layer components {
+  .app-shell {
+    width: min(100%, 88rem);
+    min-height: 100vh;
+    margin-inline: auto;
+    padding-inline: clamp(1rem, 3vw, 2.25rem);
+  }
+
+  .panel-premium {
+    border: 1px solid var(--color-line);
+    border-radius: 1rem;
+    background:
+      linear-gradient(145deg, rgba(255, 255, 255, 0.025), transparent 34%),
+      color-mix(in srgb, var(--color-panel) 92%, transparent);
+    box-shadow:
+      0 24px 70px rgba(0, 0, 0, 0.22),
+      inset 0 1px rgba(255, 255, 255, 0.025);
+    backdrop-filter: blur(18px);
+  }
+
+  .section-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--color-ink-faint);
+    font-size: 0.6875rem;
+    line-height: 1rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+  }
+
+  .composer-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.65rem;
+    color: var(--color-ink);
+    font-size: 0.75rem;
+    font-weight: 650;
+    letter-spacing: 0.01em;
+  }
+
+  .composer-step {
+    display: inline-grid;
+    min-width: 1.75rem;
+    height: 1.375rem;
+    place-items: center;
+    border: 1px solid rgba(215, 255, 63, 0.24);
+    border-radius: 999px;
+    background: rgba(215, 255, 63, 0.06);
+    color: var(--color-accent);
+    font-family: var(--font-mono);
+    font-size: 0.625rem;
+    line-height: 1;
+  }
+
+  .key-hint {
+    display: inline-flex;
+    min-width: 1.35rem;
+    height: 1.35rem;
+    flex: none;
+    padding-inline: 0.38rem;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 0.38rem;
+    background: var(--color-panel-hi);
+    color: var(--color-ink-dim);
+    font-family: var(--font-mono);
+    font-size: 0.625rem;
+    font-weight: 550;
+    line-height: 1;
+    box-shadow: inset 0 -1px rgba(0, 0, 0, 0.24);
+  }
+
+  .key-hint-inverse {
+    border-color: rgba(0, 0, 0, 0.16);
+    background: rgba(0, 0, 0, 0.14);
+    color: rgba(0, 0, 0, 0.66);
+    box-shadow: inset 0 -1px rgba(0, 0, 0, 0.16);
+  }
+
+  .control-surface {
+    min-height: 2.5rem;
+    border: 1px solid var(--color-line);
+    border-radius: 0.625rem;
+    background: color-mix(in srgb, var(--color-surface) 88%, transparent);
+    color: var(--color-ink-dim);
+    transition:
+      border-color 160ms ease,
+      background-color 160ms ease,
+      color 160ms ease,
+      transform 160ms ease;
+  }
+
+  .control-surface:hover {
+    border-color: var(--color-line-hi);
+    background: var(--color-panel-hi);
+    color: var(--color-ink);
+  }
+
+  .prompt-shell {
+    overflow: hidden;
+    border: 1px solid var(--color-line);
+    border-radius: 0.875rem;
+    background:
+      linear-gradient(140deg, rgba(255, 255, 255, 0.018), transparent 45%),
+      rgba(4, 6, 4, 0.58);
+    transition:
+      border-color 160ms ease,
+      box-shadow 160ms ease;
+  }
+
+  .prompt-shell:focus-within {
+    border-color: rgba(215, 255, 63, 0.52);
+    box-shadow: 0 0 0 3px rgba(215, 255, 63, 0.07);
+  }
+
+  .action-primary {
+    min-height: 2.75rem;
+    border-radius: 0.75rem;
+    background: var(--color-accent);
+    color: #070807;
+    box-shadow: 0 10px 35px -15px var(--color-accent);
+    transition:
+      box-shadow 180ms ease,
+      transform 180ms ease,
+      opacity 180ms ease;
+  }
+
+  .action-primary:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 14px 42px -13px var(--color-accent);
+  }
+
+  .action-primary:active:not(:disabled) {
+    transform: translateY(0);
+  }
+
+  .action-primary:disabled,
+  .control-surface:disabled {
+    cursor: not-allowed;
+    opacity: 0.48;
+  }
+
+  .result-toolbar {
+    position: sticky;
+    top: 0.75rem;
+    z-index: 20;
+    background: transparent;
+  }
+
+  .scroll-affordance {
+    position: relative;
+    isolation: isolate;
+  }
+
+  .scroll-affordance::after {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 2.5rem;
+    content: "";
+    pointer-events: none;
+    background: linear-gradient(90deg, transparent, var(--color-panel));
+    opacity: 0.82;
+  }
+
+  .validation-error {
+    border-color: rgba(248, 113, 113, 0.7) !important;
+    box-shadow: 0 0 0 3px rgba(248, 113, 113, 0.1);
+  }
+
+  .result-card {
+    box-shadow:
+      0 18px 55px rgba(0, 0, 0, 0.2),
+      inset 0 1px rgba(255, 255, 255, 0.025);
+    transition:
+      border-color 180ms ease,
+      transform 180ms ease;
+  }
+
+  .result-card:hover {
+    border-color: var(--color-line-hi);
   }
 }
 
@@ -211,12 +400,22 @@
 
 /* Subtle dotted grid background */
 .grid-bg {
-  background-image: radial-gradient(
-    circle at 1px 1px,
-    rgba(255, 255, 255, 0.045) 1px,
-    transparent 0
-  );
-  background-size: 22px 22px;
+  background-image:
+    radial-gradient(circle at 52% -12%, rgba(215, 255, 63, 0.07), transparent 30rem),
+    linear-gradient(rgba(255, 255, 255, 0.01) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.01) 1px, transparent 1px);
+  background-size: auto, 32px 32px, 32px 32px;
+  background-attachment: fixed;
+}
+
+@media (max-width: 639px) {
+  .result-toolbar {
+    top: 0.5rem;
+  }
+
+  .scroll-affordance::after {
+    width: 1.75rem;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

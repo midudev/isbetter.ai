@@ -14,7 +14,7 @@ import {
   formatCode,
   highlightCode,
   installScrollSync,
-  providerBadge,
+  modelBadge,
   renderBattleSummary,
   renderMetricsTimeline,
   renderBattleInsights,
@@ -166,15 +166,16 @@ function initBattle(b: Battle) {
             { best: best.get(keyOf(v)) || {} },
           );
     return `
-      <article class="result-card flex flex-col overflow-hidden rounded-xl border border-[var(--color-line)] bg-[var(--color-panel)]">
-        <div class="flex items-center gap-2 px-3 py-2.5">
-          <span class="size-2 shrink-0 rounded-full ${dot}"></span>
-          ${concealed() ? "" : providerBadge(v.provider)}
-          <span class="min-w-0 flex-1 truncate text-[12px] text-[var(--color-ink)]"${concealed() ? "" : ` title="${esc(v.id)}"`}>${esc(label)}</span>
+      <article class="result-card flex flex-col overflow-hidden rounded-2xl border border-[var(--color-line)] bg-[var(--color-panel)]">
+        <div class="flex min-h-12 items-center gap-2 border-b border-[var(--color-line)] px-3.5 py-2.5">
+          <span class="size-2 shrink-0 rounded-full ${dot}" aria-hidden="true"></span>
+          <span class="sr-only">${v.state}</span>
+          ${concealed() ? "" : modelBadge(v.provider, v.id)}
+          <span class="min-w-0 flex-1 truncate text-[12px] font-medium text-[var(--color-ink)]"${concealed() ? "" : ` title="${esc(v.id)}"`}>${esc(label)}</span>
           ${hasCode ? `<button data-action="open" data-model="${esc(keyOf(v))}" aria-label="Open preview in a new tab" class="grid size-7 place-items-center rounded-md text-[var(--color-ink-faint)] transition-colors hover:bg-[var(--color-line)] hover:text-[var(--color-ink)]" title="open preview in new tab">${svg("i-expand", "size-4")}</button>` : ""}
         </div>
-        <div>${stats}</div>
-        <div class="h-[clamp(22rem,52vh,42rem)] border-t border-[var(--color-line)] bg-[var(--color-surface)]">${content}</div>
+        <div class="bg-[var(--color-panel)]">${stats}</div>
+        <div class="h-[clamp(20rem,50vh,38rem)] bg-[var(--color-surface)]">${content}</div>
       </article>`;
   }
   const renderAll = () => {

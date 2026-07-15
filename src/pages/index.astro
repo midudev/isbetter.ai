@@ -1,5 +1,8 @@
 ---
 import Layout from "../layouts/Layout.astro";
+import ArenaFooter from "../components/ArenaFooter.astro";
+import ArenaHeader from "../components/ArenaHeader.astro";
+import ViewToolbar from "../components/ViewToolbar.astro";
 import { PROVIDER_LIST } from "../scripts/providers/registry";
 
 const PROMPT_EXAMPLES = [
@@ -23,79 +26,57 @@ const PROMPT_EXAMPLES = [
 ---
 
 <Layout>
-	<div class="mx-auto flex min-h-screen max-w-[1500px] flex-col px-4 sm:px-6 lg:px-8">
-		<!-- ================================ HEADER ================================ -->
-		<header class="flex items-center justify-between gap-4 py-5">
-			<div class="flex items-center gap-3">
-				<span class="grid size-9 shrink-0 place-items-center rounded-md border border-[var(--color-accent)]/30 bg-[var(--color-panel-hi)] shadow-[0_0_24px_-8px_var(--color-accent)]">
-					<img src="/favicon.svg" alt="" class="size-6" />
-				</span>
-				<div class="leading-none">
-					<h1 class="font-pixel text-[12px] tracking-[0.08em] text-[var(--color-ink)] sm:text-[14px]">
-						Compare AI Models Side by Side
-					</h1>
-					<p class="mt-1 text-[10px] uppercase tracking-[0.28em] text-[var(--color-ink-faint)]">
-						AI model comparison tool
-					</p>
-				</div>
-			</div>
+	<div class="app-shell flex flex-col">
+		<ArenaHeader />
 
-			<div class="flex items-center gap-2">
-				<button
-					id="history-btn"
-					aria-label="Open battle history"
-					class="relative flex items-center gap-1.5 rounded-md border border-[var(--color-line)] px-2.5 py-2 text-[11px] text-[var(--color-ink-dim)] transition-colors hover:border-[var(--color-line-hi)] hover:text-[var(--color-ink)]"
-					title="Battle history  ·  shortcut: H"
-				>
-					<svg class="size-4"><use href="#i-history"></use></svg>
-					<span class="hidden sm:inline">History</span>
-					<span id="history-count" class="hidden min-w-[1.05rem] rounded bg-[var(--color-panel-hi)] px-1 text-center text-[10px] text-[var(--color-ink-dim)]">0</span>
-					<kbd class="hidden h-[1.05rem] min-w-[1.05rem] items-center justify-center rounded-[4px] border border-b-2 border-[var(--color-line-hi)] bg-[var(--color-panel-hi)] px-1 font-mono text-[9px] leading-none text-[var(--color-ink-faint)] sm:inline-flex">H</kbd>
-				</button>
-				<button
-					id="key-btn"
-					aria-label="Configure API keys"
-					class="group relative flex items-center gap-1.5 rounded-md border border-[var(--color-line)] px-2.5 py-2 text-[11px] text-[var(--color-ink-dim)] transition-colors hover:border-[var(--color-line-hi)] hover:text-[var(--color-ink)]"
-					title="Configure provider API keys  ·  shortcut: K"
-				>
-					<svg class="size-4"><use href="#i-key"></use></svg>
-					<span id="key-label">API keys</span>
-					<kbd class="hidden h-[1.05rem] min-w-[1.05rem] items-center justify-center rounded-[4px] border border-b-2 border-[var(--color-line-hi)] bg-[var(--color-panel-hi)] px-1 font-mono text-[9px] leading-none text-[var(--color-ink-faint)] sm:inline-flex">K</kbd>
-					<span id="key-dot" class="size-1.5 rounded-full bg-[var(--color-accent)]"></span>
-				</button>
-			</div>
-		</header>
+		<main class="flex-1 pb-8">
+			<section class="arena-intro pb-6 pt-8 lg:pb-7 lg:pt-10">
+				<h1 class="max-w-3xl text-balance text-[clamp(2rem,4.5vw,3.75rem)] font-semibold leading-[1.02] tracking-[-0.05em] text-[var(--color-ink)]">
+					Compare AI models. Side by side.
+				</h1>
+				<p class="mt-3 max-w-2xl text-[13px] leading-6 text-[var(--color-ink-dim)] sm:text-[14px]">
+					Give every model the same prompt and compare the answer, code, preview, speed, and cost.
+				</p>
+			</section>
 
-		<!-- =============================== CONTROLS =============================== -->
-		<section class="rounded-xl border border-[var(--color-line)] bg-[var(--color-panel)]/70 backdrop-blur">
-			<!-- Models row -->
-			<div class="flex flex-col gap-3 border-b border-[var(--color-line)] p-4">
-				<div class="flex items-center gap-2 text-[10px] uppercase tracking-[0.22em] text-[var(--color-ink-faint)]">
-					<svg class="size-3.5"><use href="#i-sliders"></use></svg>
-					<span>contenders</span>
-					<span id="model-count" class="ml-1 rounded bg-[var(--color-panel-hi)] px-1.5 py-0.5 text-[var(--color-ink-dim)]">0</span>
-				</div>
-				<div class="flex flex-wrap items-center gap-2" id="models-chips">
-					<!-- chips injected here -->
-					<div class="relative" id="add-model-wrap">
-						<button
-							id="add-model-btn"
-							aria-expanded="false"
-							aria-controls="model-dropdown"
-							class="flex items-center gap-1.5 rounded-lg border border-dashed border-[var(--color-line-hi)] px-2.5 py-1.5 text-[12px] text-[var(--color-ink-dim)] transition-colors hover:border-[var(--color-accent)] hover:text-[var(--color-ink)]"
-							title="add model  ·  shortcut: M"
-						>
-							<svg class="size-4"><use href="#i-plus"></use></svg>
-							<span>add model</span>
-							<kbd class="hidden h-[1.05rem] min-w-[1.05rem] items-center justify-center rounded-[4px] border border-b-2 border-[var(--color-line-hi)] bg-[var(--color-panel-hi)] px-1 font-mono text-[9px] leading-none text-[var(--color-ink-faint)] sm:inline-flex">M</kbd>
-						</button>
+			<section class="battle-composer panel-premium overflow-visible" aria-labelledby="battle-builder-title">
+				<h2 id="battle-builder-title" class="sr-only">Configure a new battle</h2>
 
-						<!-- Dropdown -->
-						<div
-							id="model-dropdown"
-							class="absolute left-0 top-full z-30 mt-2 hidden w-[min(92vw,420px)] overflow-hidden rounded-xl border border-[var(--color-line-hi)] bg-[var(--color-panel)] shadow-2xl"
-						>
-								<div class="no-scrollbar flex gap-1 overflow-x-auto border-b border-[var(--color-line)] p-1.5" role="tablist" aria-label="Model provider">
+				<div class="grid lg:grid-cols-[minmax(18rem,0.82fr)_minmax(0,1.45fr)]">
+					<div class="min-w-0 border-b border-[var(--color-line)] p-4 sm:p-5 lg:border-b-0 lg:border-r">
+						<div class="flex items-center justify-between gap-3">
+							<p class="composer-label">
+								<span class="composer-step">01</span>
+								Models
+							</p>
+							<span class="inline-flex items-baseline gap-1.5 whitespace-nowrap text-[11px] text-[var(--color-ink-faint)]">
+								<span class="font-semibold tabular-nums text-[var(--color-ink)]"><span id="model-count" aria-live="polite">0</span>/6</span>
+								<span>selected</span>
+							</span>
+						</div>
+						<p class="mt-2 text-[12px] leading-relaxed text-[var(--color-ink-faint)]">
+							Choose at least two models.
+						</p>
+
+						<div class="mt-4 flex min-h-11 flex-wrap items-center gap-2" id="models-chips">
+							<div class="relative" id="add-model-wrap">
+								<button
+									id="add-model-btn"
+									aria-expanded="false"
+									aria-controls="model-dropdown"
+									class="control-surface flex min-h-10 items-center gap-2 border-dashed px-3 text-[12px] hover:!border-[var(--color-accent)]"
+									title="add model · shortcut: M"
+								>
+									<svg class="size-4"><use href="#i-plus"></use></svg>
+									<span>Add model</span>
+									<kbd class="key-hint">M</kbd>
+								</button>
+
+								<div
+									id="model-dropdown"
+									class="absolute left-0 top-full z-30 mt-2 hidden w-[min(92vw,440px)] overflow-hidden rounded-xl border border-[var(--color-line-hi)] bg-[var(--color-panel)] shadow-2xl"
+								>
+									<div class="no-scrollbar flex gap-1 overflow-x-auto border-b border-[var(--color-line)] p-1.5" role="tablist" aria-label="Model provider">
 									<button type="button" role="tab" aria-selected="true" data-provtab="all" class="flex shrink-0 items-center justify-center gap-1.5 rounded-md px-2.5 py-1.5 text-[11px] transition-colors">
 										<svg class="size-4"><use href="#i-world"></use></svg>
 										All
@@ -111,195 +92,151 @@ const PROMPT_EXAMPLES = [
 											<span data-provider-ready={provider.id} class="hidden size-1 rounded-full bg-emerald-400" title="configured"></span>
 										</button>
 									))}
+									</div>
+									<div class="flex items-center gap-2 border-b border-[var(--color-line)] px-3 py-2.5">
+										<svg class="size-4 text-[var(--color-ink-faint)]"><use href="#i-search"></use></svg>
+										<input
+											id="model-search"
+											type="text"
+											placeholder="Search models… (or type an id + enter)"
+											autocomplete="off"
+											spellcheck="false"
+											class="w-full bg-transparent text-[12px] text-[var(--color-ink)] outline-none placeholder:text-[var(--color-ink-faint)]"
+										/>
+									</div>
+									<ul id="model-list" role="listbox" class="no-scrollbar max-h-[320px] overflow-y-auto py-1 text-[12px]">
+										<li class="px-3 py-6 text-center text-[var(--color-ink-faint)]">loading models…</li>
+									</ul>
 								</div>
-							<div class="flex items-center gap-2 border-b border-[var(--color-line)] px-3 py-2.5">
-								<svg class="size-4 text-[var(--color-ink-faint)]"><use href="#i-search"></use></svg>
-								<input
-									id="model-search"
-									type="text"
-									placeholder="search models…  (or type an id + enter)"
-									autocomplete="off"
-									spellcheck="false"
-									class="w-full bg-transparent text-[12px] text-[var(--color-ink)] outline-none placeholder:text-[var(--color-ink-faint)]"
-								/>
 							</div>
-							<ul id="model-list" role="listbox" class="no-scrollbar max-h-[320px] overflow-y-auto py-1 text-[12px]">
-								<li class="px-3 py-6 text-center text-[var(--color-ink-faint)]">loading models…</li>
-							</ul>
+					</div>
+						<div class="mt-5 border-t border-[var(--color-line)] pt-3">
+							<button
+								id="sys-toggle"
+								class="flex w-full items-center gap-2 py-2 text-left text-[12px] text-[var(--color-ink-dim)] transition-colors hover:text-[var(--color-ink)]"
+								title="system prompt · shortcut: S"
+								aria-expanded="false"
+								aria-controls="sys-panel"
+							>
+								<svg id="sys-chevron" class="size-4 transition-transform"><use href="#i-chevron"></use></svg>
+								<span>Advanced instructions</span>
+								<kbd class="key-hint ml-auto">S</kbd>
+							</button>
+							<div id="sys-panel" class="hidden pt-2">
+								<textarea
+									id="system-prompt"
+									rows="7"
+									spellcheck="false"
+									aria-label="System prompt"
+									class="control-surface no-scrollbar w-full resize-y p-3.5 font-mono text-[11px] leading-relaxed outline-none focus:border-[var(--color-accent)]/50"
+								></textarea>
+								<div class="mt-2 flex justify-end">
+									<button id="sys-reset" class="flex items-center gap-1.5 text-[11px] text-[var(--color-ink-faint)] transition-colors hover:text-[var(--color-ink)]">
+										<svg class="size-3.5"><use href="#i-refresh"></use></svg>
+										<span>Reset to default</span>
+									</button>
+								</div>
+							</div>
+						</div>
+					</div>
+
+					<div class="min-w-0 p-4 sm:p-5">
+						<div class="flex items-center justify-between gap-3">
+							<label class="composer-label" for="prompt">
+								<span class="composer-step">02</span>
+								Prompt
+							</label>
+						</div>
+						<div id="prompt-shell" class="prompt-shell relative mt-3">
+							<textarea
+								id="prompt"
+								rows="5"
+								placeholder="What should every model build?"
+								spellcheck="false"
+								aria-describedby="prompt-error"
+								class="no-scrollbar block w-full resize-y bg-transparent px-4 pb-2 pt-4 text-[14px] leading-relaxed text-[var(--color-ink)] outline-none placeholder:text-[var(--color-ink-faint)] sm:text-[15px]"
+							></textarea>
+							<div
+								id="prompt-examples"
+								class="no-scrollbar absolute inset-x-0 bottom-0 flex translate-y-0 items-center gap-1 overflow-x-auto bg-gradient-to-t from-[var(--color-surface)] via-[var(--color-surface)]/95 to-transparent px-3 pb-2 pt-5 opacity-100 transition-[opacity,transform] duration-200 ease-out"
+								aria-label="Example prompts"
+								aria-hidden="false"
+							>
+								<span class="shrink-0 px-1 text-[9px] font-semibold uppercase tracking-[0.14em] text-[var(--color-ink-faint)]">Try</span>
+								{PROMPT_EXAMPLES.map((example) => (
+									<button
+										type="button"
+										data-prompt-example={example.prompt}
+										aria-controls="prompt"
+										class="shrink-0 rounded-md px-2.5 py-1.5 text-[11px] text-[var(--color-ink-dim)] transition-colors hover:bg-[var(--color-panel-hi)] hover:text-[var(--color-ink)]"
+									>
+										{example.label}
+									</button>
+								))}
+							</div>
+						</div>
+						<div class="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+							<p id="prompt-error" class="hidden text-[11px] text-red-400" role="alert">Write a prompt before starting the battle.</p>
+							<div class="flex w-full items-center gap-2 sm:ml-auto sm:w-auto">
+								<button
+									id="blind-mode-btn"
+									type="button"
+									class="control-surface flex min-h-11 flex-1 items-center justify-center gap-2 px-3 text-[11px] sm:flex-none"
+									title="Hide model identities · shortcut: B"
+									aria-pressed="false"
+								>
+									<svg class="size-4"><use id="blind-mode-icon" href="#i-eye"></use></svg>
+									<span>Blind comparison</span>
+									<kbd class="key-hint">B</kbd>
+									<span id="blind-mode-check" class="grid size-4 place-items-center rounded border border-[var(--color-line-hi)] text-transparent" aria-hidden="true">
+										<svg class="size-3"><use href="#i-check"></use></svg>
+									</span>
+								</button>
+								<button
+									id="run-btn"
+									class="action-primary group flex min-h-11 flex-1 shrink-0 items-center justify-center gap-2 px-5 text-[13px] font-semibold sm:w-auto sm:flex-none"
+								>
+									<svg id="run-icon" class="size-4"><use href="#i-play"></use></svg>
+									<span id="run-label">Run battle</span>
+									<kbd id="run-shortcut" class="key-hint key-hint-inverse">⌘↵</kbd>
+								</button>
+							</div>
 						</div>
 					</div>
 				</div>
-			</div>
+			</section>
 
-			<!-- System prompt (collapsible) -->
-			<div class="border-b border-[var(--color-line)]">
-				<button
-					id="sys-toggle"
-					class="flex w-full items-center gap-2 px-4 py-2.5 text-[10px] uppercase tracking-[0.22em] text-[var(--color-ink-faint)] transition-colors hover:text-[var(--color-ink-dim)]"
-					title="system prompt  ·  shortcut: S"
-				>
-					<svg id="sys-chevron" class="size-3.5 transition-transform"><use href="#i-chevron"></use></svg>
-					<span>system prompt</span>
-					<span class="ml-auto normal-case tracking-normal text-[var(--color-ink-faint)]">extraction harness</span>
-					<kbd class="hidden h-[1.05rem] min-w-[1.05rem] items-center justify-center rounded-[4px] border border-b-2 border-[var(--color-line-hi)] bg-[var(--color-panel-hi)] px-1 font-mono text-[9px] leading-none text-[var(--color-ink-faint)] sm:inline-flex">S</kbd>
-				</button>
-				<div id="sys-panel" class="hidden px-4 pb-4">
-					<textarea
-						id="system-prompt"
-						rows="9"
-						spellcheck="false"
-						class="no-scrollbar w-full resize-y rounded-lg border border-[var(--color-line)] bg-[var(--color-surface)] p-3 text-[12px] leading-relaxed text-[var(--color-ink-dim)] outline-none focus:border-[var(--color-line-hi)]"
-					></textarea>
-					<div class="mt-2 flex justify-end">
-						<button id="sys-reset" class="flex items-center gap-1.5 text-[11px] text-[var(--color-ink-faint)] transition-colors hover:text-[var(--color-ink)]">
-							<svg class="size-3.5"><use href="#i-refresh"></use></svg>
-							<span>reset to default</span>
-						</button>
+			<section class="results-stage pt-7 sm:pt-9" aria-labelledby="results-title">
+				<header class="flex min-h-11 flex-wrap items-center justify-between gap-3">
+					<h2 id="results-title" class="text-[15px] font-semibold text-[var(--color-ink)]">Results</h2>
+					<div id="results-toolbar-wrap" class="hidden">
+						<ViewToolbar />
 					</div>
-				</div>
-			</div>
+				</header>
 
-			<!-- Prompt + run -->
-			<div class="p-4">
-				<div class="rounded-lg border border-[var(--color-line)] bg-[var(--color-surface)] transition-colors focus-within:border-[var(--color-line-hi)]">
-					<textarea
-						id="prompt"
-						rows="3"
-						placeholder="Describe what every model should build…  e.g. “a responsive pricing table with a monthly/yearly toggle”"
-						spellcheck="false"
-						class="no-scrollbar block w-full resize-y bg-transparent px-3.5 pb-2 pt-3.5 text-[14px] leading-relaxed text-[var(--color-ink)] outline-none placeholder:text-[var(--color-ink-faint)]"
-					></textarea>
-					<div id="prompt-examples" class="no-scrollbar flex items-center gap-2 overflow-x-auto px-3 pb-2.5 pt-1" aria-label="Example prompts">
-						<span class="shrink-0 text-[10px] uppercase tracking-[0.16em] text-[var(--color-ink-faint)]">Try</span>
-						{PROMPT_EXAMPLES.map((example) => (
-							<button
-								type="button"
-								data-prompt-example={example.prompt}
-								aria-controls="prompt"
-								class="shrink-0 rounded-full border border-[var(--color-line)] bg-[var(--color-panel-hi)] px-2.5 py-1 text-[11px] text-[var(--color-ink-dim)] transition-colors hover:border-[var(--color-accent)]/50 hover:text-[var(--color-ink)]"
-							>
-								{example.label}
-							</button>
-						))}
-					</div>
-				</div>
+				<section id="results" role="tabpanel" aria-label="Model results" class="grid flex-1 content-start gap-4 py-4 sm:py-5 grid-cols-[repeat(auto-fill,minmax(min(22rem,100%),1fr))]">
+					<div id="empty-state" class="col-span-full flex items-center gap-3 rounded-xl border border-dashed border-[var(--color-line)] px-4 py-5 text-[12px] text-[var(--color-ink-faint)]">
+						<svg class="size-4 shrink-0"><use href="#i-vs"></use></svg>
+						<p>Run a battle to compare every model here.</p>
+						</div>
+				</section>
+			</section>
 
-				<div class="mt-3 flex flex-wrap items-center justify-between gap-3">
-				  <div class="flex flex-wrap items-center gap-2">
-					<!-- View mode segmented control -->
-					<div
-						id="view-controls"
-						class="inline-flex rounded-lg border border-[var(--color-line)] bg-[var(--color-surface)] p-0.5"
-						role="tablist"
-						aria-label="View mode"
-					>
-						<button role="tab" aria-controls="results" data-mode="output" class="view-tab flex items-center gap-1.5 rounded-md py-1.5 pl-3 pr-2 text-[12px] text-[var(--color-ink-dim)] transition-colors" title="Output — the AI's answer  ·  shortcut: O">
-							<svg class="size-4"><use href="#i-text"></use></svg>
-							<span class="hidden sm:inline">Output</span>
-							<kbd class="hidden h-[1.05rem] min-w-[1.05rem] items-center justify-center rounded-[4px] border border-b-2 border-[var(--color-line-hi)] bg-[var(--color-surface)] px-1 font-mono text-[9px] leading-none text-[var(--color-ink-faint)] sm:inline-flex">O</kbd>
-						</button>
-						<button role="tab" aria-controls="results" data-mode="code" class="view-tab flex items-center gap-1.5 rounded-md py-1.5 pl-3 pr-2 text-[12px] text-[var(--color-ink-dim)] transition-colors" title="Code — the generated source  ·  shortcut: C">
-							<svg class="size-4"><use href="#i-code"></use></svg>
-							<span class="hidden sm:inline">Code</span>
-							<kbd class="hidden h-[1.05rem] min-w-[1.05rem] items-center justify-center rounded-[4px] border border-b-2 border-[var(--color-line-hi)] bg-[var(--color-surface)] px-1 font-mono text-[9px] leading-none text-[var(--color-ink-faint)] sm:inline-flex">C</kbd>
-						</button>
-						<button role="tab" aria-controls="results" data-mode="preview" class="view-tab flex items-center gap-1.5 rounded-md py-1.5 pl-3 pr-2 text-[12px] text-[var(--color-ink-dim)] transition-colors" title="Preview — live render  ·  shortcut: P">
-							<svg class="size-4"><use href="#i-browser"></use></svg>
-							<span class="hidden sm:inline">Preview</span>
-							<kbd class="hidden h-[1.05rem] min-w-[1.05rem] items-center justify-center rounded-[4px] border border-b-2 border-[var(--color-line-hi)] bg-[var(--color-surface)] px-1 font-mono text-[9px] leading-none text-[var(--color-ink-faint)] sm:inline-flex">P</kbd>
-						</button>
-					</div>
-
-					<!-- Scroll-link toggle -->
-					<button
-						id="scroll-link-btn"
-						class="flex items-center gap-1.5 rounded-lg border border-[var(--color-line)] bg-[var(--color-surface)] py-1.5 pl-2.5 pr-2 text-[12px] text-[var(--color-ink-dim)] transition-colors hover:text-[var(--color-ink)]"
-						title="Scroll link — scroll every result together  ·  shortcut: L"
-						aria-pressed="false"
-					>
-						<svg class="size-4"><use href="#i-link"></use></svg>
-						<span class="hidden sm:inline">Scroll link</span>
-						<span id="scroll-link-check" class="grid size-4 place-items-center rounded border border-[var(--color-line-hi)] text-transparent" aria-hidden="true">
-							<svg class="size-3"><use href="#i-check"></use></svg>
-						</span>
-						<kbd class="hidden h-[1.05rem] min-w-[1.05rem] items-center justify-center rounded-[4px] border border-b-2 border-[var(--color-line-hi)] bg-[var(--color-surface)] px-1 font-mono text-[9px] leading-none text-[var(--color-ink-faint)] sm:inline-flex">L</kbd>
-					</button>
-					<button
-						id="blind-mode-btn"
-						class="flex items-center gap-1.5 rounded-lg border border-[var(--color-line)] bg-[var(--color-surface)] px-2.5 py-1.5 text-[12px] text-[var(--color-ink-dim)] transition-colors hover:text-[var(--color-ink)] disabled:cursor-not-allowed disabled:opacity-40"
-						title="Blind mode — randomize cards and hide model identities  ·  shortcut: B"
-						aria-pressed="false"
-					>
-						<svg class="size-4"><use href="#i-eye"></use></svg>
-						<span class="hidden sm:inline">Blind mode</span>
-						<span id="blind-mode-check" class="grid size-4 place-items-center rounded border border-[var(--color-line-hi)] text-transparent" aria-hidden="true">
-							<svg class="size-3"><use href="#i-check"></use></svg>
-						</span>
-						<kbd class="hidden h-[1.05rem] min-w-[1.05rem] items-center justify-center rounded-[4px] border border-b-2 border-[var(--color-line-hi)] bg-[var(--color-surface)] px-1 font-mono text-[9px] leading-none text-[var(--color-ink-faint)] sm:inline-flex">B</kbd>
-					</button>
-					<button
-						id="reveal-models-btn"
-						class="hidden items-center gap-1.5 rounded-lg border border-[var(--color-accent)]/40 bg-[var(--color-accent)]/10 px-2.5 py-1.5 text-[12px] text-[var(--color-accent)] transition-colors hover:bg-[var(--color-accent)]/15"
-						title="Reveal model identities"
-					>
-						<svg class="size-4"><use href="#i-eye"></use></svg>
-						<span>Reveal models</span>
-					</button>
-				  </div>
-
-					<div class="flex items-center gap-2">
-						<span id="battle-status" class="hidden text-[11px] tabular-nums text-[var(--color-ink-faint)]" role="status" aria-live="polite"></span>
-						<button
-							id="rerun-all-btn"
-							aria-label="Re-run every model"
-							class="hidden size-10 place-items-center rounded-lg border border-[var(--color-line)] bg-[var(--color-surface)] text-[var(--color-ink-dim)] transition-colors hover:border-[var(--color-line-hi)] hover:text-[var(--color-ink)] disabled:cursor-not-allowed disabled:opacity-40 [&:not(.hidden)]:grid"
-							title="Re-run every model from scratch (ignores cached results)"
-						>
-							<svg class="size-4"><use href="#i-refresh"></use></svg>
-						</button>
-						<button
-							id="run-btn"
-							class="group flex items-center gap-2 rounded-lg bg-[var(--color-accent)] px-5 py-2.5 text-[13px] font-medium text-black transition-all hover:shadow-[0_0_28px_-6px_var(--color-accent)] disabled:cursor-not-allowed disabled:opacity-40"
-						>
-							<svg id="run-icon" class="size-4"><use href="#i-play"></use></svg>
-							<span id="run-label">Run battle</span>
-							<kbd class="ml-1 hidden h-[1.05rem] items-center justify-center rounded-[4px] border border-b-2 border-black/30 bg-black/10 px-1.5 font-mono text-[10px] leading-none text-black/65 sm:inline-flex">⌘↵</kbd>
-						</button>
-					</div>
-				</div>
-			</div>
-		</section>
-
-		<!-- =============================== RESULTS =============================== -->
-		<section id="results" role="tabpanel" class="grid flex-1 content-start gap-4 py-6 grid-cols-[repeat(auto-fill,minmax(min(22rem,100%),1fr))]">
-			<!-- empty state -->
-			<div id="empty-state" class="col-span-full grid place-items-center py-24 text-center">
-				<div class="flex flex-col items-center gap-4">
-					<span class="grid size-14 place-items-center rounded-2xl border border-[var(--color-line)] text-[var(--color-ink-faint)]">
-						<svg class="size-7"><use href="#i-bolt"></use></svg>
-					</span>
-					<div class="max-w-sm">
-						<p class="font-pixel text-[13px] tracking-[0.1em] text-[var(--color-ink-dim)]">no battle yet</p>
-						<p class="mt-2 text-[12px] leading-relaxed text-[var(--color-ink-faint)]">
-							Add a few contenders, write a prompt, and hit run. Outputs, tokens,
-							latency and cost line up side by side.
-						</p>
-					</div>
-				</div>
-			</div>
-		</section>
-		<section id="battle-summary" class="mb-6 hidden overflow-hidden rounded-xl border border-[var(--color-line)] bg-[var(--color-panel)]/70">
-			<header class="flex flex-wrap items-center gap-3 border-b border-[var(--color-line)] px-4 py-3">
+		<section id="battle-summary" class="mb-6 hidden overflow-hidden">
+			<header class="flex flex-wrap items-center gap-3 border-b border-[var(--color-line)] px-4 py-3.5 sm:px-5">
 				<svg class="size-4 text-[var(--color-accent)]"><use href="#i-trophy"></use></svg>
-				<h2 class="text-[11px] uppercase tracking-[0.18em] text-[var(--color-ink-dim)]">Battle summary</h2>
+				<div>
+					<h2 class="text-[11px] uppercase tracking-[0.16em] text-[var(--color-ink)]">Battle analysis</h2>
+					<p class="mt-0.5 text-[10px] text-[var(--color-ink-faint)]">Performance and cost, normalized side by side</p>
+				</div>
 			</header>
 			<div class="grid border-b border-[var(--color-line)] lg:grid-cols-[minmax(0,2fr)_minmax(16rem,1fr)]">
 				<div id="battle-timeline" class="min-w-0 border-b border-[var(--color-line)] lg:border-b-0 lg:border-r"></div>
 				<aside id="battle-insights"></aside>
 			</div>
-			<div id="battle-summary-list" class="overflow-x-auto"></div>
+			<div class="scroll-affordance"><div id="battle-summary-list" class="overflow-x-auto"></div></div>
 		</section>
-		<section id="share-panel" class="mb-6 hidden rounded-xl border border-[var(--color-accent)]/25 bg-[var(--color-accent)]/[0.04] p-4" aria-labelledby="share-title">
+		<section id="share-panel" class="mb-6 hidden py-4" aria-labelledby="share-title">
 			<div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 				<div class="flex max-w-3xl items-start gap-3">
 					<span class="grid size-9 shrink-0 place-items-center rounded-lg bg-[var(--color-accent)]/10 text-[var(--color-accent)]">
@@ -324,39 +261,22 @@ const PROMPT_EXAMPLES = [
 				</button>
 			</div>
 		</section>
+		</main>
 
-		<footer class="flex flex-col items-start gap-3 border-t border-[var(--color-line)] py-4 text-[10px] uppercase tracking-[0.2em] text-[var(--color-ink-faint)] sm:flex-row sm:items-center sm:justify-between">
-			<span class="flex items-center gap-1.5">
-				<span>developed with</span>
-				<svg class="size-3.5 text-[var(--color-accent)]"><use href="#i-heart"></use></svg>
-				<span>by</span>
-				<a href="https://midu.dev" target="_blank" rel="noopener" class="text-[var(--color-ink-dim)] underline-offset-2 transition-colors hover:text-[var(--color-ink)] hover:underline">midudev</a>
-			</span>
-			<div class="flex flex-wrap items-center gap-x-4 gap-y-2 sm:justify-end">
-				<a
-					href="https://github.com/sponsors/midudev"
-					target="_blank"
-					rel="noopener"
-					class="text-[var(--color-accent)] underline-offset-2 transition-opacity hover:underline hover:opacity-80"
-				>
-					Keep AI Battle free — support the project
-				</a>
-				<span class="hidden border-l border-[var(--color-line-hi)] pl-4 lg:inline">keys & prompts stay in your browser</span>
-			</div>
-		</footer>
+		<ArenaFooter />
 	</div>
 
 	<!-- ============================== API KEY MODAL ============================== -->
 	<div id="key-modal" class="fixed inset-0 z-50 hidden" role="dialog" aria-modal="true" aria-labelledby="key-modal-title">
-		<div id="key-backdrop" class="absolute inset-0 bg-black/70 backdrop-blur-sm"></div>
-		<div class="absolute left-1/2 top-1/2 w-[min(92vw,440px)] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-[var(--color-line-hi)] bg-[var(--color-panel)] p-5 shadow-2xl">
+		<div id="key-backdrop" class="absolute inset-0 bg-black/80 backdrop-blur-md"></div>
+		<div class="panel-premium absolute left-1/2 top-1/2 w-[min(92vw,480px)] -translate-x-1/2 -translate-y-1/2 p-5 shadow-2xl sm:p-6">
 			<div class="flex items-center gap-2.5">
-				<span class="grid size-8 place-items-center rounded-lg bg-[var(--color-panel-hi)] text-[var(--color-accent)]">
-					<svg class="size-4"><use href="#i-key"></use></svg>
+				<span class="grid size-10 place-items-center rounded-xl bg-[var(--color-accent)]/10 text-[var(--color-accent)]">
+					<svg class="size-5"><use href="#i-key"></use></svg>
 				</span>
 				<div>
-					<h2 id="key-modal-title" class="text-[13px] text-[var(--color-ink)]">API keys</h2>
-					<p class="text-[11px] text-[var(--color-ink-faint)]">stored locally — never leave your browser. Add the ones you'll use.</p>
+					<h2 id="key-modal-title" class="text-[14px] font-medium text-[var(--color-ink)]">Connect providers</h2>
+					<p class="mt-0.5 text-[11px] text-[var(--color-ink-faint)]">Keys stay in this browser and are only sent to their provider.</p>
 				</div>
 			</div>
 			<p id="key-modal-message" class="mt-4 hidden rounded-lg border border-[var(--color-accent)]/30 bg-[var(--color-accent)]/10 px-3 py-2 text-[12px] text-[var(--color-accent)]" role="status"></p>
@@ -378,7 +298,7 @@ const PROMPT_EXAMPLES = [
 								<span class="text-[10px] text-[var(--color-ink-faint)]">{provider.credentialHelp}</span>
 							)}
 						</div>
-						<div class="flex items-center gap-2 rounded-lg border border-[var(--color-line)] bg-[var(--color-surface)] px-3 py-2 focus-within:border-[var(--color-line-hi)]">
+						<div class="control-surface flex items-center gap-2 px-3 focus-within:border-[var(--color-accent)]/45">
 							<input
 								id={`api-key-${provider.id}`}
 								type={provider.id === "local" ? "text" : "password"}
@@ -400,10 +320,10 @@ const PROMPT_EXAMPLES = [
 				))}
 			</div>
 			<div class="mt-4 flex items-center justify-end gap-2">
-				<button id="key-cancel" class="rounded-lg border border-[var(--color-line)] px-3.5 py-2 text-[12px] text-[var(--color-ink-dim)] transition-colors hover:text-[var(--color-ink)]">
+				<button id="key-cancel" class="control-surface px-4 text-[12px]">
 					Cancel
 				</button>
-				<button id="key-save" class="flex items-center gap-1.5 rounded-lg bg-[var(--color-accent)] px-3.5 py-2 text-[12px] font-medium text-black transition-opacity hover:opacity-90">
+				<button id="key-save" class="action-primary flex items-center gap-1.5 px-4 text-[12px] font-semibold">
 					<svg class="size-4"><use href="#i-check"></use></svg>
 					<span>Save</span>
 				</button>
@@ -413,17 +333,17 @@ const PROMPT_EXAMPLES = [
 
 	<!-- ============================== HISTORY DRAWER ============================== -->
 	<div id="history-drawer" class="fixed inset-0 z-50 hidden" role="dialog" aria-modal="true" aria-labelledby="history-title">
-		<div id="history-backdrop" class="absolute inset-0 bg-black/70 backdrop-blur-sm"></div>
+		<div id="history-backdrop" class="absolute inset-0 bg-black/80 backdrop-blur-md"></div>
 		<aside
 			id="history-panel"
-			class="absolute right-0 top-0 flex h-full w-[min(92vw,440px)] translate-x-full flex-col border-l border-[var(--color-line-hi)] bg-[var(--color-panel)] shadow-2xl transition-transform duration-300"
+			class="absolute right-0 top-0 flex h-full w-[min(94vw,480px)] translate-x-full flex-col border-l border-[var(--color-line-hi)] bg-[var(--color-panel)] shadow-2xl transition-transform duration-300"
 		>
 			<header class="flex items-center gap-2.5 border-b border-[var(--color-line)] px-4 py-3.5">
-				<span class="grid size-8 place-items-center rounded-lg bg-[var(--color-panel-hi)] text-[var(--color-accent)]">
-					<svg class="size-4"><use href="#i-history"></use></svg>
+				<span class="grid size-10 place-items-center rounded-xl bg-[var(--color-accent)]/10 text-[var(--color-accent)]">
+					<svg class="size-5"><use href="#i-history"></use></svg>
 				</span>
 				<div class="flex-1">
-					<h2 id="history-title" class="text-[13px] text-[var(--color-ink)]">Battle history</h2>
+					<h2 id="history-title" class="text-[14px] font-medium text-[var(--color-ink)]">Battle history</h2>
 					<p class="text-[11px] text-[var(--color-ink-faint)]">stored locally in this browser</p>
 				</div>
 				<button id="history-clear" aria-label="Clear battle history" class="hidden items-center gap-1.5 rounded-md border border-[var(--color-line)] px-2 py-1.5 text-[11px] text-[var(--color-ink-faint)] transition-colors hover:border-red-500/40 hover:text-red-400">
