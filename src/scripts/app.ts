@@ -3,14 +3,13 @@
    All state (api key, prompt, selection) lives in the browser. No backend.
    ========================================================================= */
 import {
+  $,
   esc,
   svg,
   fmtDur,
   fmtCost,
   estTokens,
   extractCode,
-  formatCode,
-  highlightCode,
   statsRowHTML,
   thoughtsHTML,
   doneContentHTML,
@@ -94,7 +93,6 @@ interface Entry {
   raw: string;
   reasoning: string; // the model's streamed chain-of-thought
   code: string; // raw extracted HTML (used for preview + open-in-tab)
-  codeFmt: string; // pretty-printed (used for copy)
   codeHtml: string; // highlighted HTML markup (used for the code view)
   error: string;
   promptTokens: number;
@@ -110,16 +108,13 @@ interface Entry {
   metrics: MetricSample[];
   cached: boolean;
   view?: ViewMode; // per-card view override (auto-set to preview on finish)
+  waitingDismissed: boolean;
   prompt: string; // user prompt this result was generated for (for caching)
   system: string; // system prompt this result was generated for
   el: HTMLElement;
   timer?: number;
   startedAt: number;
 }
-
-/* ------------------------------- tiny utils ------------------------------ */
-const $ = <T extends Element = HTMLElement>(sel: string) =>
-  document.querySelector(sel) as T;
 
 /* --------------------------------- state --------------------------------- */
 // Migrate the old single-key / bare-id format to the per-provider format.
@@ -253,20 +248,18 @@ function refreshKeyUI() {
   els.keyDot.style.background = has ? "var(--color-ink-faint)" : "var(--color-accent)";
   els.keyDot.classList.toggle("animate-pulse", !has);
   for (const p of PROVIDER_IDS)
-    document
-      .querySelector(`[data-provider-ready="${p}"]`)
-      ?.classList.toggle("hidden", !hasCreds(p));
+    $(`[data-provider-ready="${p}"]`)?.classList.toggle("hidden", !hasCreds(p));
 }
 function openKeyModal(message = "") {
   dialogReturnFocus = document.activeElement as HTMLElement | null;
   for (const p of PROVIDER_IDS) {
-    const inp = document.querySelector<HTMLInputElement>(`#api-key-${p}`);
+    const inp = $<HTMLInputElement>(`#api-key-${p}`);
     if (inp) inp.value = keyFor(p);
   }
   els.keyMessage.textContent = message;
   els.keyMessage.classList.toggle("hidden", !message);
   els.keyModal.classList.remove("hidden");
-  setTimeout(() => document.querySelector<HTMLInputElement>("#api-key-openrouter")?.focus(), 30);
+  setTimeout(() => $<HTMLInputElement>("#api-key-openrouter")?.focus(), 30);
 }
 function closeKeyModal() {
   els.keyModal.classList.add("hidden");
@@ -277,7 +270,7 @@ els.keyCancel.addEventListener("click", closeKeyModal);
 els.keyBackdrop.addEventListener("click", closeKeyModal);
 els.keySave.addEventListener("click", () => {
   for (const p of PROVIDER_IDS) {
-    const inp = document.querySelector<HTMLInputElement>(`#api-key-${p}`);
+    const inp = $<HTMLInputElement>(`#api-key-${p}`);
     const val = inp?.value.trim() || "";
     const changed = val !== keys[p];
     keys[p] = val;
@@ -292,7 +285,7 @@ els.keySave.addEventListener("click", () => {
   closeKeyModal();
 });
 PROVIDER_IDS.forEach((p) => {
-  document.querySelector(`#api-key-${p}`)?.addEventListener("keydown", (e) => {
+  $(`#api-key-${p}`)?.addEventListener("keydown", (e) => {
     if ((e as KeyboardEvent).key === "Enter") els.keySave.dispatchEvent(new Event("click"));
   });
 });
@@ -1024,12 +1017,54 @@ function contentHTML(entry: Entry): string {
     // regardless of the selected view (code/preview need the finished doc).
     return `<div data-scroll class="result-scroll h-full overflow-auto p-3.5 text-[12px] leading-relaxed text-[var(--color-ink-dim)]">${thoughtsHTML(entry.reasoning, true)}<div class="whitespace-pre-wrap break-words"><span data-stream>${esc(entry.raw)}</span><span class="caret"></span></div></div>`;
   }
-  return doneContentHTML({ ...entry, id: displayName(entry.key) }, viewOf(entry));
+  const view = viewOf(entry);
+  const content = doneContentHTML({ ...entry, id: displayName(entry.key) }, view);
+  const pendingPeers = [...entries.values()].filter(
+    (peer) =>
+      peer !== entry && (peer.state === "loading" || peer.state === "streaming"),
+  ).length;
+  if (view !== "output" || entry.waitingDismissed || pendingPeers === 0) return content;
+
+  return `
+    <div class="relative h-full">
+      ${content}
+      <div data-waiting-overlay role="status" aria-live="polite" class="absolute inset-0 z-20 grid place-items-center bg-[var(--color-surface)]/95 p-6 text-center backdrop-blur-sm">
+        <button data-action="dismiss-waiting" data-model="${esc(entry.key)}" aria-label="Close waiting screen and view output" class="absolute right-3 top-3 grid size-8 place-items-center rounded-lg border border-[var(--color-line)] text-[var(--color-ink-faint)] transition-colors hover:border-[var(--color-line-hi)] hover:bg-[var(--color-panel-hi)] hover:text-[var(--color-ink)]" title="view output">
+          ${svg("i-x", "size-4")}
+        </button>
+        <div class="flex max-w-sm flex-col items-center">
+          <span class="mb-5 grid size-12 place-items-center rounded-full border border-[var(--color-accent)]/30 bg-[var(--color-accent)]/10 text-[var(--color-accent)]">
+            ${svg("i-check", "size-6")}
+          </span>
+          <p class="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--color-accent)]">Model finished</p>
+          <p class="mt-2 text-xl font-semibold text-[var(--color-ink)]">Completed in ${fmtDur(entry.durationMs)}</p>
+          <p data-waiting-message class="mt-3 text-[12px] leading-relaxed text-[var(--color-ink-dim)]">Waiting for ${pendingPeers} other model${pendingPeers === 1 ? "" : "s"} to finish…</p>
+          <p class="mt-1 text-[10px] text-[var(--color-ink-faint)]">Close this screen to view the output.</p>
+        </div>
+      </div>
+    </div>`;
 }
 
 function renderContent(entry: Entry) {
   const slot = entry.el.querySelector("[data-content]") as HTMLElement;
   if (slot) slot.innerHTML = contentHTML(entry);
+}
+
+function syncWaitingOverlays() {
+  entries.forEach((entry) => {
+    const overlay = entry.el.querySelector("[data-waiting-overlay]");
+    const pendingPeers = [...entries.values()].filter(
+      (peer) =>
+        peer !== entry && (peer.state === "loading" || peer.state === "streaming"),
+    ).length;
+    if (overlay && (pendingPeers === 0 || viewOf(entry) !== "output")) {
+      overlay.remove();
+      return;
+    }
+    const message = overlay?.querySelector("[data-waiting-message]");
+    if (message)
+      message.textContent = `Waiting for ${pendingPeers} other model${pendingPeers === 1 ? "" : "s"} to finish…`;
+  });
 }
 
 function renderCard(entry: Entry, best: Record<string, boolean> = {}) {
@@ -1072,7 +1107,6 @@ function newCard(key: string): Entry {
     raw: "",
     reasoning: "",
     code: "",
-    codeFmt: "",
     codeHtml: "",
     error: "",
     promptTokens: 0,
@@ -1086,6 +1120,7 @@ function newCard(key: string): Entry {
     costKnown: false,
     metrics: [],
     cached: false,
+    waitingDismissed: false,
     prompt: "",
     system: "",
     el,
@@ -1168,7 +1203,7 @@ async function callModel(entry: Entry) {
   entry.state = "loading";
   entry.raw = "";
   entry.reasoning = "";
-  entry.code = entry.codeFmt = entry.codeHtml = entry.error = "";
+  entry.code = entry.codeHtml = entry.error = "";
   entry.firstTokenAt = undefined;
   entry.promptTokens = 0;
   entry.completionTokens = 0;
@@ -1182,6 +1217,7 @@ async function callModel(entry: Entry) {
   entry.metrics = [];
   entry.cached = false;
   entry.view = undefined;
+  entry.waitingDismissed = false;
   renderCard(entry);
 
   // No credential for this provider → fail fast with a helpful message.
@@ -1290,8 +1326,8 @@ async function callModel(entry: Entry) {
 
     entry.code = extractCode(entry.raw);
     if (entry.code) {
-      entry.codeFmt = formatCode(entry.code);
-      entry.codeHtml = highlightCode(entry.codeFmt);
+      const { highlightCode } = await import("./code-render");
+      entry.codeHtml = highlightCode(entry.code);
     }
     entry.usageEstimated =
       typeof usage.completion_tokens !== "number" || typeof usage.prompt_tokens !== "number";
@@ -1333,6 +1369,7 @@ async function callModel(entry: Entry) {
     stopTimer(entry);
     if (entry.state === "done" || entry.metrics.length) recordMetricSample(entry, true);
     renderCard(entry);
+    syncWaitingOverlays();
     refreshComparison();
   }
 }
@@ -1448,6 +1485,10 @@ async function runBattle(force = false) {
   els.promptError.classList.add("hidden");
   els.prompt.removeAttribute("aria-invalid");
 
+  // Prewarm the formatter/highlighter chunk while models stream, so it's
+  // already resolved when the first result finishes.
+  import("./code-render");
+
   els.empty.classList.add("hidden");
   els.resultsToolbarWrap.classList.remove("hidden");
   currentBattleId = null;
@@ -1535,7 +1576,7 @@ els.results.addEventListener("click", async (e) => {
   const action = btn.dataset.action;
 
   if (action === "copy" && entry.code) {
-    await navigator.clipboard.writeText(entry.codeFmt || entry.code);
+    await navigator.clipboard.writeText(entry.code);
     play("success");
     const span = btn.querySelector("span");
     if (span) {
@@ -1547,6 +1588,9 @@ els.results.addEventListener("click", async (e) => {
     // Restart the demo without spending tokens — just reload the iframe.
     const f = entry.el.querySelector("iframe[data-preview]") as HTMLIFrameElement | null;
     if (f) f.srcdoc = f.srcdoc;
+  } else if (action === "dismiss-waiting") {
+    entry.waitingDismissed = true;
+    btn.closest("[data-waiting-overlay]")?.remove();
   } else if (action === "rerun") {
     if (!keyFor(entry.provider).trim()) return openKeyModal();
     await callModel(entry);

@@ -27,6 +27,7 @@
   --font-pixel: "Geist Pixel", "Geist Mono", monospace;
   --font-pixel-line: "Geist Pixel Line", "Geist Mono", monospace;
   --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, monospace;
+  --font-code: Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   --font-sans: "Geist", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 
   --color-ink: #f4f5f2;
@@ -378,6 +379,7 @@
 .code-block {
   min-width: 100%;
   width: max-content;
+  font-family: var(--font-code);
 }
 .code-line {
   display: flex;

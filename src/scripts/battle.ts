@@ -2,6 +2,7 @@
    /battle?id=… — read-only review of a saved battle from localStorage.
    ========================================================================= */
 import {
+  $,
   getBattle,
   loadHistory,
   saveHistory,
@@ -11,8 +12,6 @@ import {
   svg,
   fmtWhen,
   extractCode,
-  formatCode,
-  highlightCode,
   installScrollSync,
   modelBadge,
   renderBattleSummary,
@@ -29,11 +28,12 @@ import { parseSharedBattle, sharedBattleToBattle } from "./shared-battle";
 import { play } from "cuelume";
 
 const VIEW_KEY = "ab:view";
-const $ = <T extends Element = HTMLElement>(s: string) =>
-  document.querySelector(s) as T;
 
 installMetricTooltips();
 installTimelineTracking();
+
+// Fetch the formatter/highlighter chunk in parallel with the battle itself.
+const codeRender = import("./code-render");
 
 const id = new URLSearchParams(location.search).get("id") || "";
 const localBattle = getBattle(id);
@@ -59,12 +59,13 @@ if (!battle) {
   const view = $("#battle-view");
   view.classList.remove("hidden");
   view.classList.add("flex");
-  initBattle(battle);
+  await initBattle(battle);
 }
 
-type V = HistoryResult & { codeFmt: string; codeHtml: string };
+type V = HistoryResult & { codeHtml: string };
 
-function initBattle(b: Battle) {
+async function initBattle(b: Battle) {
+  const { highlightCode } = await codeRender;
   $("#battle-when").textContent = fmtWhen(b.ts);
   const promptEl = $("#battle-prompt");
   if (b.prompt) promptEl.textContent = b.prompt;
@@ -73,9 +74,8 @@ function initBattle(b: Battle) {
   // Re-derive the formatted + highlighted code for each saved result.
   const views: V[] = b.results.map((r) => {
     const code = r.code || (r.state === "done" ? extractCode(r.raw) : "");
-    const codeFmt = code ? formatCode(code) : "";
-    const codeHtml = codeFmt ? highlightCode(codeFmt) : "";
-    return { ...r, code, codeFmt, codeHtml };
+    const codeHtml = code ? highlightCode(code) : "";
+    return { ...r, code, codeHtml };
   });
   const keyOf = (result: HistoryResult) =>
     result.key || `${result.provider || "openrouter"}::${result.id}`;
@@ -267,7 +267,7 @@ function initBattle(b: Battle) {
     const v = views.find((x) => keyOf(x) === btn.dataset.model);
     if (!v) return;
     if (btn.dataset.action === "copy" && v.code) {
-      await navigator.clipboard.writeText(v.codeFmt || v.code);
+      await navigator.clipboard.writeText(v.code);
       play("success");
       const sp = btn.querySelector("span");
       if (sp) {

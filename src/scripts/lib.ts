@@ -2,11 +2,6 @@
    Shared helpers used by both the arena (index) and the battle detail route.
    Pure functions + result rendering + history storage. No page-specific state.
    ========================================================================= */
-import hljs from "highlight.js/lib/core";
-import xml from "highlight.js/lib/languages/xml";
-import css from "highlight.js/lib/languages/css";
-import javascript from "highlight.js/lib/languages/javascript";
-import beautify from "js-beautify";
 import { modelBrandFor } from "./model-icons";
 import { PROVIDERS } from "./providers/registry";
 import {
@@ -20,9 +15,15 @@ export {
   type MetricSample,
 } from "./metrics";
 
-hljs.registerLanguage("xml", xml);
-hljs.registerLanguage("css", css);
-hljs.registerLanguage("javascript", javascript);
+/* ------------------------------- DOM queries ----------------------------- */
+export const $ = <T extends Element = HTMLElement>(
+  selector: string,
+  root: ParentNode = document,
+) => root.querySelector<T>(selector) as T;
+export const $$ = <T extends Element = HTMLElement>(
+  selector: string,
+  root: ParentNode = document,
+) => [...root.querySelectorAll<T>(selector)];
 
 /* ------------------------------- formatting ------------------------------ */
 export const esc = (s: string) =>
@@ -57,27 +58,6 @@ export function extractAnswer(text: string): string {
   const withoutFences = text.replace(/```[a-zA-Z]*\s*\n?[\s\S]*?```/g, "").trim();
   return withoutFences || (extractCode(text) ? "" : text.trim());
 }
-export function formatCode(code: string): string {
-  try {
-    return beautify.html(code, {
-      indent_size: 2,
-      wrap_line_length: 0,
-      preserve_newlines: true,
-      max_preserve_newlines: 1,
-      end_with_newline: false,
-    });
-  } catch {
-    return code;
-  }
-}
-export function highlightCode(code: string): string {
-  try {
-    return hljs.highlight(code, { language: "xml" }).value;
-  } catch {
-    return code.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]!);
-  }
-}
-
 /* --------------------------- result rendering ---------------------------- */
 export interface ResultView {
   id: string;
@@ -85,7 +65,6 @@ export interface ResultView {
   raw: string;
   reasoning?: string;
   code: string;
-  codeFmt: string;
   codeHtml: string;
 }
 export type ViewMode = "output" | "code" | "preview";
@@ -320,13 +299,13 @@ export function installScrollSync(isOn: () => boolean) {
   };
   const applyToOthers = (ratio: number, source?: ScrollSource) => {
     const now = performance.now();
-    document.querySelectorAll<HTMLElement>(".result-scroll").forEach((el) => {
+    $$<HTMLElement>(".result-scroll").forEach((el) => {
       if (el === source) return;
       const h = el.scrollHeight - el.clientHeight;
       suppressedUntil.set(el, now + 180);
       el.scrollTop = ratio * h;
     });
-    document.querySelectorAll<HTMLIFrameElement>("iframe[data-preview]").forEach((f) => {
+    $$<HTMLIFrameElement>("iframe[data-preview]").forEach((f) => {
       f.contentWindow?.postMessage(
         { __ab: "set", id: typeof source === "string" ? source : "__parent", ratio },
         "*",
@@ -361,7 +340,7 @@ export function installScrollSync(isOn: () => boolean) {
     const d: any = e.data;
     if (!d || (d.__ab !== "engage" && d.__ab !== "scroll") || typeof d.id !== "string")
       return;
-    const frame = [...document.querySelectorAll<HTMLIFrameElement>("iframe[data-preview]")].find(
+    const frame = $$<HTMLIFrameElement>("iframe[data-preview]").find(
       (candidate) => candidate.contentWindow === e.source && candidate.dataset.preview === d.id,
     );
     if (!frame) return;
