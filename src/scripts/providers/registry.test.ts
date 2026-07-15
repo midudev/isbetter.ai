@@ -49,11 +49,15 @@ describe("provider registry", () => {
     });
   });
 
-  it("returns null when pricing is unknown", () => {
+  it("returns configured model pricing and null when unknown", () => {
     expect(priceFor("groq", "unknown-model")).toBeNull();
     expect(priceFor("deepseek", "deepseek-v4-flash")).toEqual({
       prompt: 0.14 / 1e6,
       completion: 0.28 / 1e6,
+    });
+    expect(priceFor("anthropic", "claude-fable-5")).toEqual({
+      prompt: 10 / 1e6,
+      completion: 50 / 1e6,
     });
   });
 });
