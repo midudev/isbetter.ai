@@ -969,6 +969,30 @@ function statsRow(entry: Entry, best: Record<string, boolean> = {}) {
   );
 }
 
+function refreshLiveStats(entry: Entry) {
+  const stats = entry.el.querySelector<HTMLElement>("[data-stats]");
+  if (!stats) return;
+
+  const template = document.createElement("template");
+  template.innerHTML = statsRow(entry);
+  const currentPills = [...stats.querySelectorAll<HTMLElement>("[data-metric-tooltip]")];
+  const nextPills = [...template.content.querySelectorAll<HTMLElement>("[data-metric-tooltip]")];
+
+  if (!currentPills.length || currentPills.length !== nextPills.length) {
+    stats.replaceChildren(template.content);
+    return;
+  }
+
+  currentPills.forEach((pill, index) => {
+    const next = nextPills[index];
+    const nextValue = next.querySelector<HTMLElement>("[data-metric-value]");
+    const value = pill.querySelector<HTMLElement>("[data-metric-value]");
+    if (nextValue && value) value.textContent = nextValue.textContent;
+    pill.dataset.metricTooltip = next.dataset.metricTooltip;
+    pill.setAttribute("aria-label", next.getAttribute("aria-label") || "");
+  });
+}
+
 function dotColor(state: Entry["state"]) {
   if (state === "loading" || state === "streaming")
     return "bg-[var(--color-accent)] animate-pulse";
@@ -1120,8 +1144,7 @@ function flush(entry: Entry) {
   if (span) span.textContent = entry.raw;
   const scroll = entry.el.querySelector("[data-scroll]") as HTMLElement | null;
   if (scroll) scroll.scrollTop = scroll.scrollHeight;
-  const stats = entry.el.querySelector("[data-stats]");
-  if (stats) stats.innerHTML = statsRow(entry);
+  refreshLiveStats(entry);
   if (recordMetricSample(entry)) refreshTimeline();
 }
 function startTimer(entry: Entry) {

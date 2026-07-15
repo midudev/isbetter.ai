@@ -30,7 +30,6 @@ function decorate(element: Element) {
     setCue(control, "data-cuelume-toggle", "bloom");
   } else if (control.matches(TOGGLE)) {
     setCue(control, "data-cuelume-toggle", "toggle");
-    if (control.matches("[data-add]")) setCue(control, "data-cuelume-hover", "whisper");
   } else if (control.matches(SPARKLE)) {
     setCue(control, "data-cuelume-toggle", "sparkle");
   } else if (!control.matches(SUCCESS)) {

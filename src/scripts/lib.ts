@@ -130,7 +130,7 @@ export function statPill(icon: string, value: string, label: string, best = fals
   return `
     <div tabindex="0" data-metric-tooltip="${esc(label)}" aria-label="${esc(`${label}: ${value}`)}" class="${responsive} items-center gap-1.5 rounded-md border ${best ? "border-[var(--color-accent)]/40 bg-[var(--color-accent)]/10 text-[var(--color-accent)]" : "border-[var(--color-line)] text-[var(--color-ink-dim)]"} px-2 py-1">
       ${svg(icon, `size-3.5 shrink-0 opacity-90 ${iconColor[icon] || "text-[var(--color-ink-dim)]"}`)}
-      <span class="font-mono text-[11px] tabular-nums">${value}</span>
+      <span data-metric-value class="font-mono text-[11px] tabular-nums">${value}</span>
       ${best ? `<span class="text-[10px] font-medium uppercase tracking-wide">best</span>` : ""}
     </div>`;
 }
