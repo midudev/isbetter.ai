@@ -5,10 +5,8 @@
 import {
   esc,
   svg,
-  fmtInt,
   fmtDur,
   fmtCost,
-  fmtRate,
   estTokens,
   extractCode,
   formatCode,
@@ -21,9 +19,23 @@ import {
   fmtWhen,
   installScrollSync,
   SCROLLLINK_KEY,
+  renderBattleSummary,
+  renderMetricsTimeline,
+  renderBattleInsights,
+  downsampleMetricSamples,
+  installMetricTooltips,
+  installTimelineTracking,
+  providerBadge,
   type Battle,
   type HistoryResult,
+  type MetricSample,
+  type ViewMode,
 } from "./lib";
+import { toSharedBattleData } from "./shared-battle";
+import { PROVIDERS, PROVIDER_IDS, priceFor } from "./providers/registry";
+import { SSEDecoder, type SSEEvent } from "./providers/sse";
+import type { ModelInfo, ProviderId, UsageInfo } from "./providers/types";
+import { play } from "cuelume";
 
 const DEFAULT_SYSTEM_PROMPT = `You are competing in a head-to-head build challenge. Another AI receives the EXACT same request, and your answer is judged against theirs on quality, polish and correctness.
 
@@ -40,278 +52,6 @@ Respond in TWO parts, in this exact order:
    - Be polished, responsive, accessible and immediately runnable.
 
 Output ONLY the short answer followed by the single \`\`\`html block. Write nothing after the closing fence.`;
-
-type ViewMode = "output" | "code" | "preview";
-type ProviderId = "openrouter" | "openai" | "anthropic" | "local";
-
-interface ModelInfo {
-  id: string;
-  name: string;
-  promptPrice: number; // USD per token
-  completionPrice: number; // USD per token
-  context: number;
-}
-
-/* ------------------------------- providers ------------------------------- */
-// A parsed streaming delta, normalized across the three APIs.
-interface Chunk {
-  content: string;
-  reasoning: string;
-  usage: any;
-}
-function parseOpenAIChunk(json: any): Chunk {
-  const d = json.choices?.[0]?.delta || {};
-  let reasoning = "";
-  // `reasoning` is OpenRouter's field; `reasoning_content` is what LM Studio,
-  // DeepSeek and vLLM stream for reasoning models (e.g. Qwen3).
-  if (typeof d.reasoning === "string") reasoning = d.reasoning;
-  else if (typeof d.reasoning_content === "string") reasoning = d.reasoning_content;
-  else if (Array.isArray(d.reasoning_details))
-    reasoning = d.reasoning_details.map((x: any) => x?.text || x?.summary || "").join("");
-  return { content: d.content || "", reasoning, usage: json.usage || null };
-}
-function parseAnthropicChunk(json: any): Chunk {
-  let content = "",
-    reasoning = "",
-    usage: any = null;
-  if (json.type === "content_block_delta") {
-    if (json.delta?.type === "text_delta") content = json.delta.text || "";
-    else if (json.delta?.type === "thinking_delta") reasoning = json.delta.thinking || "";
-  } else if (json.type === "message_start") {
-    const u = json.message?.usage;
-    if (u) usage = { prompt_tokens: u.input_tokens };
-  } else if (json.type === "message_delta") {
-    if (json.usage) usage = { completion_tokens: json.usage.output_tokens };
-  }
-  return { content, reasoning, usage };
-}
-
-/* ---------------------------------------------------------------------------
-   Built-in price table (USD per 1M tokens) for providers that don't return
-   cost. OpenRouter carries its own pricing via its API. Matched by id prefix,
-   most-specific first. Sourced from the official OpenAI/Anthropic pricing pages
-   (July 2026) — see the summary shown to the user.
---------------------------------------------------------------------------- */
-const OPENAI_PRICES: [string, number, number][] = [
-  ["gpt-5.6-sol", 5, 30],
-  ["gpt-5.6-terra", 2.5, 15],
-  ["gpt-5.6-luna", 1, 6],
-  ["gpt-5.6", 2.5, 15],
-  ["gpt-5.5-pro", 30, 180],
-  ["gpt-5.5", 5, 30],
-  ["gpt-5.4-mini", 0.75, 4.5],
-  ["gpt-5.4-nano", 0.2, 1.25],
-  ["gpt-5.4-pro", 30, 180],
-  ["gpt-5.4", 2.5, 15],
-  ["gpt-5.3-codex", 1.75, 14],
-  ["gpt-5-mini", 0.25, 2],
-  ["gpt-5-nano", 0.05, 0.4],
-  ["gpt-5", 1.25, 10],
-  ["gpt-4.1-mini", 0.4, 1.6],
-  ["gpt-4.1-nano", 0.1, 0.4],
-  ["gpt-4.1", 2, 8],
-  ["chatgpt-4o", 2.5, 10],
-  ["gpt-4o-mini", 0.15, 0.6],
-  ["gpt-4o", 2.5, 10],
-  ["o4-mini", 1.1, 4.4],
-  ["o3-mini", 1.1, 4.4],
-  ["o3", 2, 8],
-  ["o1", 15, 60],
-  ["gpt-chat-latest", 5, 30],
-  ["chatgpt", 5, 30],
-];
-const ANTHROPIC_PRICES: [string, number, number][] = [
-  ["claude-opus-4-8", 5, 25],
-  ["claude-opus-4-7", 5, 25],
-  ["claude-opus-4-6", 5, 25],
-  ["claude-opus-4-5", 5, 25],
-  ["claude-opus-4-1", 15, 75],
-  ["claude-opus-4", 15, 75],
-  ["claude-opus", 5, 25],
-  ["claude-sonnet-5", 3, 15],
-  ["claude-sonnet-4-6", 3, 15],
-  ["claude-sonnet-4-5", 3, 15],
-  ["claude-sonnet-4", 3, 15],
-  ["claude-sonnet", 3, 15],
-  ["claude-haiku-4-5", 1, 5],
-  ["claude-haiku-3-5", 0.8, 4],
-  ["claude-haiku", 1, 5],
-  ["claude-fable", 10, 50],
-  ["claude-mythos", 10, 50],
-];
-// Returns per-TOKEN {prompt, completion} prices, or null if unknown.
-function priceFor(provider: ProviderId, id: string): { prompt: number; completion: number } | null {
-  const table = provider === "openai" ? OPENAI_PRICES : provider === "anthropic" ? ANTHROPIC_PRICES : null;
-  if (!table) return null;
-  const lid = id.toLowerCase();
-  for (const [prefix, i, o] of table)
-    if (lid.startsWith(prefix)) return { prompt: i / 1e6, completion: o / 1e6 };
-  return null;
-}
-
-interface Provider {
-  name: string;
-  short: string;
-  color: string;
-  keyPlaceholder: string;
-  keyUrl: string;
-  modelsUrl: string;
-  modelsNeedKey: boolean;
-  chatUrl: string;
-  headers: (key: string) => Record<string, string>;
-  body: (model: string, system: string, user: string) => object;
-  parse: (json: any) => Chunk;
-  parseModels: (json: any) => ModelInfo[];
-}
-
-const PROVIDERS: Record<ProviderId, Provider> = {
-  openrouter: {
-    name: "OpenRouter",
-    short: "OR",
-    color: "#d8ff3e",
-    keyPlaceholder: "sk-or-v1-…",
-    keyUrl: "https://openrouter.ai/keys",
-    modelsUrl: "https://openrouter.ai/api/v1/models",
-    modelsNeedKey: true,
-    chatUrl: "https://openrouter.ai/api/v1/chat/completions",
-    headers: (key) => ({
-      Authorization: `Bearer ${key}`,
-      "Content-Type": "application/json",
-      "HTTP-Referer": location.origin,
-      "X-Title": "AI Battle",
-    }),
-    body: (model, system, user) => ({
-      model,
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: user },
-      ],
-      stream: true,
-      usage: { include: true },
-      reasoning: { enabled: true },
-    }),
-    parse: parseOpenAIChunk,
-    parseModels: (json) =>
-      (json.data || []).map((m: any) => ({
-        id: m.id,
-        name: m.name || m.id,
-        promptPrice: parseFloat(m.pricing?.prompt || "0"),
-        completionPrice: parseFloat(m.pricing?.completion || "0"),
-        context: m.context_length || 0,
-      })),
-  },
-  openai: {
-    name: "OpenAI",
-    short: "OpenAI",
-    color: "#10a37f",
-    keyPlaceholder: "sk-…",
-    keyUrl: "https://platform.openai.com/api-keys",
-    modelsUrl: "https://api.openai.com/v1/models",
-    modelsNeedKey: true,
-    chatUrl: "https://api.openai.com/v1/chat/completions",
-    headers: (key) => ({
-      Authorization: `Bearer ${key}`,
-      "Content-Type": "application/json",
-    }),
-    body: (model, system, user) => ({
-      model,
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: user },
-      ],
-      stream: true,
-      stream_options: { include_usage: true },
-    }),
-    parse: parseOpenAIChunk,
-    parseModels: (json) =>
-      (json.data || [])
-        .filter(
-          (m: any) =>
-            /gpt|^o\d|^chatgpt/i.test(m.id) &&
-            !/embedding|tts|whisper|audio|image|dall|realtime|moderation|transcribe|search/i.test(
-              m.id,
-            ),
-        )
-        .map((m: any) => {
-          const p = priceFor("openai", m.id);
-          return {
-            id: m.id,
-            name: m.id,
-            promptPrice: p?.prompt || 0,
-            completionPrice: p?.completion || 0,
-            context: 0,
-          };
-        }),
-  },
-  anthropic: {
-    name: "Anthropic",
-    short: "Claude",
-    color: "#d97757",
-    keyPlaceholder: "sk-ant-…",
-    keyUrl: "https://console.anthropic.com/settings/keys",
-    modelsUrl: "https://api.anthropic.com/v1/models",
-    modelsNeedKey: true,
-    chatUrl: "https://api.anthropic.com/v1/messages",
-    headers: (key) => ({
-      "x-api-key": key,
-      "anthropic-version": "2023-06-01",
-      "anthropic-dangerous-direct-browser-access": "true",
-      "Content-Type": "application/json",
-    }),
-    body: (model, system, user) => ({
-      model,
-      max_tokens: 8192,
-      system,
-      messages: [{ role: "user", content: user }],
-      stream: true,
-    }),
-    parse: parseAnthropicChunk,
-    parseModels: (json) =>
-      (json.data || []).map((m: any) => {
-        const p = priceFor("anthropic", m.id);
-        return {
-          id: m.id,
-          name: m.display_name || m.id,
-          promptPrice: p?.prompt || 0,
-          completionPrice: p?.completion || 0,
-          context: 0,
-        };
-      }),
-  },
-  // A self-hosted, OpenAI-compatible server (Ollama, LM Studio, llama.cpp,
-  // vLLM, LocalAI…). The "credential" is the base URL — stored in the key slot
-  // — and its `/models` endpoint is listed automatically. No auth, no cost.
-  local: {
-    name: "Local",
-    short: "Local",
-    color: "#8b93a7",
-    keyPlaceholder: "http://localhost:11434/v1",
-    keyUrl: "",
-    modelsUrl: "", // resolved from the base URL at call time (see modelsUrlFor)
-    modelsNeedKey: true, // gated on the base URL rather than an API key
-    chatUrl: "", // resolved from the base URL at call time (see chatUrlFor)
-    headers: () => ({ "Content-Type": "application/json" }),
-    body: (model, system, user) => ({
-      model,
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: user },
-      ],
-      stream: true,
-      stream_options: { include_usage: true },
-    }),
-    parse: parseOpenAIChunk,
-    parseModels: (json) =>
-      (json.data || json.models || []).map((m: any) => ({
-        id: m.id || m.name,
-        name: m.name || m.id,
-        promptPrice: 0,
-        completionPrice: 0,
-        context: m.context_length || 0,
-      })),
-  },
-};
-const PROVIDER_IDS: ProviderId[] = ["openrouter", "openai", "anthropic", "local"];
 
 // Contender identity = "<provider>::<modelId>".
 const provKey = (p: ProviderId, id: string) => `${p}::${id}`;
@@ -341,6 +81,7 @@ const LS = {
   prompt: "ab:prompt",
   view: "ab:view",
   scrollLink: SCROLLLINK_KEY,
+  blind: "ab:blind",
 };
 const keyLS = (p: ProviderId) => `ab:key:${p}`;
 
@@ -361,7 +102,12 @@ interface Entry {
   cost: number;
   durationMs: number; // total time: request → finish
   genMs: number; // generation time: first token → finish
+  ttftMs: number; // request → first token
   firstTokenAt?: number; // performance.now() when the first token arrived
+  usageEstimated: boolean;
+  costKnown: boolean;
+  metrics: MetricSample[];
+  cached: boolean;
   view?: ViewMode; // per-card view override (auto-set to preview on finish)
   prompt: string; // user prompt this result was generated for (for caching)
   system: string; // system prompt this result was generated for
@@ -392,12 +138,9 @@ const $ = <T extends Element = HTMLElement>(sel: string) =>
 
 // All credentials default to empty — models are only listed for providers the
 // user has actually configured. For `local`, the "credential" is the base URL.
-const keys: Record<ProviderId, string> = {
-  openrouter: localStorage.getItem(keyLS("openrouter")) || "",
-  openai: localStorage.getItem(keyLS("openai")) || "",
-  anthropic: localStorage.getItem(keyLS("anthropic")) || "",
-  local: localStorage.getItem(keyLS("local")) || "",
-};
+const keys = Object.fromEntries(
+  PROVIDER_IDS.map((provider) => [provider, localStorage.getItem(keyLS(provider)) || ""]),
+) as Record<ProviderId, string>;
 const keyFor = (p: ProviderId) => keys[p] || "";
 const hasCreds = (p: ProviderId) => keyFor(p).trim() !== "";
 
@@ -411,19 +154,24 @@ const chatUrlFor = (p: ProviderId) =>
 
 let viewMode = (localStorage.getItem(LS.view) as ViewMode) || "preview";
 let scrollLink = localStorage.getItem(LS.scrollLink) === "1";
+let blindMode = localStorage.getItem(LS.blind) === "1";
+let revealed = !blindMode;
+let blindOrder: string[] = [];
+const blindAliases = new Map<string, string>();
 let systemPrompt = localStorage.getItem(LS.system) || DEFAULT_SYSTEM_PROMPT;
 let selected: string[] = JSON.parse(localStorage.getItem(LS.models) || "[]"); // composite keys
-const providerModels: Record<ProviderId, ModelInfo[]> = {
-  openrouter: [],
-  openai: [],
-  anthropic: [],
-  local: [],
-};
+const providerModels = Object.fromEntries(
+  PROVIDER_IDS.map((provider) => [provider, [] as ModelInfo[]]),
+) as Record<ProviderId, ModelInfo[]>;
 const catalog = new Map<string, ModelInfo>(); // composite key → model info
 const loadedProviders = new Set<ProviderId>();
-let dropdownProvider: ProviderId = "openrouter";
+const providerErrors = new Map<ProviderId, string>();
+type DropdownProvider = ProviderId | "all";
+let dropdownProvider: DropdownProvider = "all";
 const entries = new Map<string, Entry>(); // keyed by composite key
+const controllers = new Map<string, AbortController>();
 let running = false;
+let currentBattleId: string | null = null;
 
 /* --------------------------------- refs ---------------------------------- */
 const els = {
@@ -433,6 +181,7 @@ const els = {
   keyBackdrop: $("#key-backdrop"),
   keySave: $("#key-save"),
   keyCancel: $("#key-cancel"),
+  keyMessage: $("#key-modal-message"),
   chips: $("#models-chips"),
   addWrap: $("#add-model-wrap"),
   addBtn: $("#add-model-btn"),
@@ -446,12 +195,25 @@ const els = {
   sysText: $<HTMLTextAreaElement>("#system-prompt"),
   sysReset: $("#sys-reset"),
   prompt: $<HTMLTextAreaElement>("#prompt"),
+  promptExamples: $("#prompt-examples"),
   runBtn: $<HTMLButtonElement>("#run-btn"),
   rerunAllBtn: $<HTMLButtonElement>("#rerun-all-btn"),
   runLabel: $("#run-label"),
   runIcon: $("#run-icon"),
   viewControls: $("#view-controls"),
   scrollBtn: $("#scroll-link-btn"),
+  scrollCheck: $("#scroll-link-check"),
+  blindBtn: $<HTMLButtonElement>("#blind-mode-btn"),
+  blindCheck: $("#blind-mode-check"),
+  revealBtn: $<HTMLButtonElement>("#reveal-models-btn"),
+  status: $("#battle-status"),
+  summary: $("#battle-summary"),
+  summaryList: $("#battle-summary-list"),
+  timeline: $("#battle-timeline"),
+  insights: $("#battle-insights"),
+  sharePanel: $("#share-panel"),
+  shareBtn: $<HTMLButtonElement>("#share-battle-btn"),
+  shareStatus: $("#share-status"),
   results: $("#results"),
   empty: $("#empty-state"),
   historyBtn: $("#history-btn"),
@@ -468,23 +230,32 @@ const els = {
 /*  API KEYS — one per provider                                          */
 /* ===================================================================== */
 const anyKey = () => PROVIDER_IDS.some((p) => keyFor(p).trim());
+let dialogReturnFocus: HTMLElement | null = null;
 function refreshKeyUI() {
   const has = anyKey();
   els.keyDot.style.background = has ? "var(--color-ink-faint)" : "var(--color-accent)";
   els.keyDot.classList.toggle("animate-pulse", !has);
+  for (const p of PROVIDER_IDS)
+    document
+      .querySelector(`[data-provider-ready="${p}"]`)
+      ?.classList.toggle("hidden", !hasCreds(p));
 }
-function openKeyModal() {
+function openKeyModal(message = "") {
+  dialogReturnFocus = document.activeElement as HTMLElement | null;
   for (const p of PROVIDER_IDS) {
     const inp = document.querySelector<HTMLInputElement>(`#api-key-${p}`);
     if (inp) inp.value = keyFor(p);
   }
+  els.keyMessage.textContent = message;
+  els.keyMessage.classList.toggle("hidden", !message);
   els.keyModal.classList.remove("hidden");
   setTimeout(() => document.querySelector<HTMLInputElement>("#api-key-openrouter")?.focus(), 30);
 }
 function closeKeyModal() {
   els.keyModal.classList.add("hidden");
+  dialogReturnFocus?.focus();
 }
-els.keyBtn.addEventListener("click", openKeyModal);
+els.keyBtn.addEventListener("click", () => openKeyModal());
 els.keyCancel.addEventListener("click", closeKeyModal);
 els.keyBackdrop.addEventListener("click", closeKeyModal);
 els.keySave.addEventListener("click", () => {
@@ -495,9 +266,10 @@ els.keySave.addEventListener("click", () => {
     keys[p] = val;
     if (val) localStorage.setItem(keyLS(p), val);
     else localStorage.removeItem(keyLS(p));
-    // A provider that just got a key can now load its models.
-    if (changed && val && PROVIDERS[p].modelsNeedKey) loadProviderModels(p);
+    // Refresh additions and clear catalogs whose credential was removed.
+    if (changed) loadProviderModels(p);
   }
+  play("success");
   refreshKeyUI();
   syncRunBtn();
   closeKeyModal();
@@ -513,12 +285,13 @@ PROVIDER_IDS.forEach((p) => {
 /* ===================================================================== */
 async function loadProviderModels(p: ProviderId) {
   const prov = PROVIDERS[p];
-  if (prov.modelsNeedKey && !hasCreds(p)) {
+  if (!hasCreds(p)) {
     providerModels[p] = [];
-    if (dropdownProvider === p) renderModelList();
+    if (dropdownProvider === p || dropdownProvider === "all") renderModelList();
     return;
   }
   try {
+    providerErrors.delete(p);
     // A GET carrying custom headers (Content-Type, auth…) is a non-simple
     // request and triggers a CORS preflight. `local` servers like LM Studio
     // don't answer OPTIONS with CORS headers, so we send a bare GET — no auth
@@ -527,15 +300,23 @@ async function loadProviderModels(p: ProviderId) {
       modelsUrlFor(p),
       prov.modelsNeedKey && p !== "local" ? { headers: prov.headers(keyFor(p)) } : {},
     );
+    if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
     const json = await res.json();
     providerModels[p] = prov.parseModels(json).sort((a, b) => a.id.localeCompare(b.id));
-    loadedProviders.add(p);
     for (const m of providerModels[p]) catalog.set(provKey(p, m.id), m);
-  } catch {
+  } catch (error) {
     providerModels[p] = [];
+    const message = error instanceof Error ? error.message : "Request failed";
+    providerErrors.set(
+      p,
+      message === "Failed to fetch"
+        ? "Browser access was blocked (likely CORS). Use this model through OpenRouter."
+        : message,
+    );
   }
+  loadedProviders.add(p);
   renderChips(); // names may have resolved
-  if (dropdownProvider === p) renderModelList();
+  if (dropdownProvider === p || dropdownProvider === "all") renderModelList();
 }
 
 async function loadModels() {
@@ -575,21 +356,16 @@ const contenderName = (key: string) =>
 
 // Cost estimate: catalog pricing when known (OpenRouter/known models), else the
 // built-in price table (covers custom-typed OpenAI/Anthropic ids).
-function costFor(entry: Entry, promptTokens: number, completionTokens: number): number {
+function costFor(entry: Entry, promptTokens: number, completionTokens: number): number | null {
   const cat = catalog.get(entry.key);
-  if (cat && (cat.promptPrice || cat.completionPrice))
+  if (cat && cat.promptPrice !== null && cat.completionPrice !== null)
     return promptTokens * cat.promptPrice + completionTokens * cat.completionPrice;
   const pr = priceFor(entry.provider, entry.id);
-  return pr ? promptTokens * pr.prompt + completionTokens * pr.completion : 0;
-}
-
-function providerBadge(p: ProviderId) {
-  const prov = PROVIDERS[p];
-  return `<span class="shrink-0 rounded px-1 py-0.5 text-[9px] font-medium uppercase tracking-wide" style="color:${prov.color};background:${prov.color}1a" title="${prov.name}">${esc(prov.short)}</span>`;
+  return pr ? promptTokens * pr.prompt + completionTokens * pr.completion : null;
 }
 
 function priceLabel(m: ModelInfo) {
-  if (!m.promptPrice && !m.completionPrice) return "";
+  if (m.promptPrice === null || m.completionPrice === null) return "";
   const i = (m.promptPrice * 1e6).toFixed(2);
   const o = (m.completionPrice * 1e6).toFixed(2);
   return `$${i}/M in · $${o}/M out`;
@@ -632,53 +408,82 @@ function renderModelList() {
     t.classList.toggle("text-[var(--color-ink)]", on);
     t.classList.toggle("bg-[var(--color-panel-hi)]", on);
     t.classList.toggle("text-[var(--color-ink-faint)]", !on);
+    t.setAttribute("aria-selected", String(on));
   });
 
-  const p = dropdownProvider;
-  const prov = PROVIDERS[p];
-  const models = providerModels[p];
   const q = els.search.value.trim().toLowerCase();
   const qraw = els.search.value.trim();
+  const visibleProviders =
+    dropdownProvider === "all" ? PROVIDER_IDS.filter(hasCreds) : [dropdownProvider];
+  const models = visibleProviders.flatMap((provider) =>
+    providerModels[provider].map((model) => ({ provider, model })),
+  );
   const matches = (q
-    ? models.filter((m) => m.id.toLowerCase().includes(q) || m.name.toLowerCase().includes(q))
+    ? models.filter(
+        ({ model }) =>
+          model.id.toLowerCase().includes(q) || model.name.toLowerCase().includes(q),
+      )
     : models
   ).slice(0, 80);
 
   let html = "";
-  if (prov.modelsNeedKey && !hasCreds(p)) {
-    const what = p === "local" ? "base URL" : "API key";
-    const cta = p === "local" ? "set base URL" : "add key";
-    html += `<li class="px-3 py-6 text-center text-[11px] leading-relaxed text-[var(--color-ink-faint)]">Set your ${esc(prov.name)} ${what} to list its models.<br/><button data-openkeys class="mt-2 text-[var(--color-accent)] underline-offset-2 hover:underline">${cta}</button></li>`;
-  } else if (!models.length) {
-    html += `<li class="px-3 py-6 text-center text-[var(--color-ink-faint)]">${loadedProviders.has(p) ? "no models" : "loading models…"}</li>`;
+  if (dropdownProvider === "all") {
+    if (!visibleProviders.length) {
+      html += `<li class="px-3 py-6 text-center text-[11px] leading-relaxed text-[var(--color-ink-faint)]">Add a provider API key to search its models.<br/><button data-openkeys class="mt-2 text-[var(--color-accent)] underline-offset-2 hover:underline">add key</button></li>`;
+    } else if (!models.length) {
+      const loading = visibleProviders.some((provider) => !loadedProviders.has(provider));
+      const failed = visibleProviders.some((provider) => providerErrors.has(provider));
+      html += failed && !loading
+        ? `<li class="px-3 py-6 text-center text-[11px] leading-relaxed text-red-400/90">Could not load models from the configured providers.<br/><button data-openkeys class="mt-2 text-[var(--color-accent)] underline-offset-2 hover:underline">check credentials</button></li>`
+        : `<li class="px-3 py-6 text-center text-[var(--color-ink-faint)]">${loading ? "loading models…" : "no models"}</li>`;
+    }
+  } else {
+    const prov = PROVIDERS[dropdownProvider];
+    if (!hasCreds(dropdownProvider)) {
+      const what = dropdownProvider === "local" ? "base URL" : "API key";
+      const cta = dropdownProvider === "local" ? "set base URL" : "add key";
+      html += `<li class="px-3 py-6 text-center text-[11px] leading-relaxed text-[var(--color-ink-faint)]">Set your ${esc(prov.name)} ${what} to list its models.<br/><button data-openkeys class="mt-2 text-[var(--color-accent)] underline-offset-2 hover:underline">${cta}</button></li>`;
+    } else if (providerErrors.has(dropdownProvider)) {
+      html += `<li class="px-3 py-6 text-center text-[11px] leading-relaxed text-red-400/90">${esc(providerErrors.get(dropdownProvider)!)}<br/><button data-openkeys class="mt-2 text-[var(--color-accent)] underline-offset-2 hover:underline">check credentials</button></li>`;
+    } else if (!models.length) {
+      html += `<li class="px-3 py-6 text-center text-[var(--color-ink-faint)]">${loadedProviders.has(dropdownProvider) ? "no models" : "loading models…"}</li>`;
+    }
   }
-  for (const m of matches) {
-    const key = provKey(p, m.id);
+  for (const { provider, model: m } of matches) {
+    const key = provKey(provider, m.id);
     const on = selected.includes(key);
     const price = priceLabel(m);
     html += `
       <li>
-        <button data-add="${esc(key)}" class="flex w-full items-start gap-2.5 px-3 py-2 text-left transition-colors hover:bg-[var(--color-panel-hi)]">
+        <button role="option" aria-selected="${on}" data-add="${esc(key)}" class="flex w-full items-start gap-2.5 px-3 py-2 text-left transition-colors hover:bg-[var(--color-panel-hi)]">
           <span class="mt-0.5 grid size-4 shrink-0 place-items-center rounded border ${on ? "border-[var(--color-accent)] bg-[var(--color-accent)] text-black" : "border-[var(--color-line-hi)] text-transparent"}">
             ${svg("i-check", "size-3")}
           </span>
           <span class="min-w-0 flex-1">
-            <span class="block truncate text-[var(--color-ink)]">${esc(m.name)}</span>
+            <span class="flex items-center gap-1.5">
+              ${dropdownProvider === "all" ? providerBadge(provider) : ""}
+              <span class="block min-w-0 truncate text-[var(--color-ink)]">${esc(m.name)}</span>
+            </span>
             <span class="mt-0.5 block truncate font-mono text-[10px] text-[var(--color-ink-faint)]">${esc(m.id)}${price ? " · " + price : ""}</span>
           </span>
         </button>
       </li>`;
   }
-  if (qraw && !models.some((m) => m.id.toLowerCase() === q)) {
+  if (
+    dropdownProvider !== "all" &&
+    qraw &&
+    !models.some(({ model }) => model.id.toLowerCase() === q)
+  ) {
+    const prov = PROVIDERS[dropdownProvider];
     html += `
       <li>
-        <button data-add="${esc(provKey(p, qraw))}" class="flex w-full items-center gap-2.5 border-t border-[var(--color-line)] px-3 py-2.5 text-left text-[var(--color-accent)] transition-colors hover:bg-[var(--color-panel-hi)]">
+        <button data-add="${esc(provKey(dropdownProvider, qraw))}" class="flex w-full items-center gap-2.5 border-t border-[var(--color-line)] px-3 py-2.5 text-left text-[var(--color-accent)] transition-colors hover:bg-[var(--color-panel-hi)]">
           ${svg("i-plus", "size-4")}
           <span>add ${esc(prov.short)}: <span class="font-mono">${esc(qraw)}</span></span>
         </button>
       </li>`;
   }
-  if (!matches.length && models.length && !qraw) {
+  if (!matches.length && models.length && qraw) {
     html += `<li class="px-3 py-6 text-center text-[var(--color-ink-faint)]">no matches</li>`;
   }
   els.list.innerHTML = html;
@@ -700,18 +505,21 @@ els.list.addEventListener("click", (e) => {
 els.dropdown.addEventListener("click", (e) => {
   const tab = (e.target as HTMLElement).closest("[data-provtab]") as HTMLElement;
   if (!tab) return;
-  dropdownProvider = tab.dataset.provtab as ProviderId;
+  dropdownProvider = tab.dataset.provtab as DropdownProvider;
   els.search.value = "";
-  if (!loadedProviders.has(dropdownProvider)) loadProviderModels(dropdownProvider);
+  if (dropdownProvider !== "all" && !loadedProviders.has(dropdownProvider))
+    loadProviderModels(dropdownProvider);
   renderModelList();
 });
 
 function toggleDropdown(open?: boolean) {
   const show = open ?? els.dropdown.classList.contains("hidden");
   els.dropdown.classList.toggle("hidden", !show);
+  els.addBtn.setAttribute("aria-expanded", String(show));
   if (show) {
     els.search.value = "";
-    if (!loadedProviders.has(dropdownProvider)) loadProviderModels(dropdownProvider);
+    if (dropdownProvider !== "all" && !loadedProviders.has(dropdownProvider))
+      loadProviderModels(dropdownProvider);
     renderModelList();
     setTimeout(() => els.search.focus(), 20);
   }
@@ -720,6 +528,10 @@ els.addBtn.addEventListener("click", () => toggleDropdown());
 els.search.addEventListener("input", renderModelList);
 els.search.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && els.search.value.trim()) {
+    if (dropdownProvider === "all") {
+      els.list.querySelector<HTMLButtonElement>("[data-add]")?.click();
+      return;
+    }
     const key = provKey(dropdownProvider, els.search.value.trim());
     if (!selected.includes(key)) selected.push(key);
     persistSelection();
@@ -757,9 +569,12 @@ function refreshViewTabs() {
   els.viewControls.querySelectorAll<HTMLElement>(".view-tab").forEach((tab) => {
     const on = tab.dataset.mode === viewMode;
     tab.classList.toggle("bg-[var(--color-panel-hi)]", on);
-    tab.classList.toggle("text-[var(--color-ink)]", on);
+    tab.classList.toggle("text-[var(--color-accent)]", on);
     tab.classList.toggle("text-[var(--color-ink-dim)]", !on);
+    tab.classList.toggle("hover:bg-[var(--color-panel-hi)]", !on);
+    tab.classList.toggle("hover:text-[var(--color-ink)]", !on);
     tab.setAttribute("aria-selected", String(on));
+    tab.tabIndex = on ? 0 : -1;
   });
 }
 // Effective view for a card: its own override (auto-set to preview on finish)
@@ -780,13 +595,36 @@ els.viewControls.addEventListener("click", (e) => {
   const tab = (e.target as HTMLElement).closest(".view-tab") as HTMLElement;
   if (tab) setView(tab.dataset.mode as ViewMode);
 });
+els.viewControls.addEventListener("keydown", (event) => {
+  if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+  const tabs = [...els.viewControls.querySelectorAll<HTMLElement>(".view-tab")];
+  const current = tabs.indexOf(document.activeElement as HTMLElement);
+  if (current < 0) return;
+  event.preventDefault();
+  const next =
+    event.key === "Home"
+      ? 0
+      : event.key === "End"
+        ? tabs.length - 1
+        : (current + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
+  tabs[next].focus();
+  setView(tabs[next].dataset.mode as ViewMode);
+});
 
 /* ----- scroll link: scroll every result pane together ------------------- */
+function refreshToggleCheck(element: HTMLElement, active: boolean) {
+  element.classList.toggle("border-[var(--color-accent)]", active);
+  element.classList.toggle("bg-[var(--color-accent)]", active);
+  element.classList.toggle("text-black", active);
+  element.classList.toggle("border-[var(--color-line-hi)]", !active);
+  element.classList.toggle("text-transparent", !active);
+}
 function refreshScrollBtn() {
   els.scrollBtn.classList.toggle("border-[var(--color-accent)]", scrollLink);
   els.scrollBtn.classList.toggle("text-[var(--color-accent)]", scrollLink);
   els.scrollBtn.classList.toggle("text-[var(--color-ink-dim)]", !scrollLink);
   els.scrollBtn.setAttribute("aria-pressed", String(scrollLink));
+  refreshToggleCheck(els.scrollCheck, scrollLink);
 }
 function toggleScrollLink() {
   scrollLink = !scrollLink;
@@ -796,6 +634,77 @@ function toggleScrollLink() {
 els.scrollBtn.addEventListener("click", toggleScrollLink);
 installScrollSync(() => scrollLink);
 
+/* ----- blind mode: shuffled anonymous cards until explicit reveal ------- */
+const isConcealed = () => blindMode && !revealed;
+const blindLabel = (key: string) => blindAliases.get(key) || "Model ?";
+const displayName = (key: string) => (isConcealed() ? blindLabel(key) : contenderName(key));
+
+function shuffled<T>(items: T[]): T[] {
+  const result = [...items];
+  for (let i = result.length - 1; i > 0; i--) {
+    const random = crypto.getRandomValues(new Uint32Array(1))[0] / 2 ** 32;
+    const j = Math.floor(random * (i + 1));
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  return result;
+}
+
+function setBlindOrder(order: string[]) {
+  blindOrder = [...order];
+  blindAliases.clear();
+  order.forEach((key, index) => blindAliases.set(key, `Model ${String.fromCharCode(65 + index)}`));
+}
+
+function refreshBlindUI() {
+  els.blindBtn.classList.toggle("border-[var(--color-accent)]", blindMode);
+  els.blindBtn.classList.toggle("text-[var(--color-accent)]", blindMode);
+  els.blindBtn.classList.toggle("text-[var(--color-ink-dim)]", !blindMode);
+  els.blindBtn.setAttribute("aria-pressed", String(blindMode));
+  refreshToggleCheck(els.blindCheck, blindMode);
+  els.blindBtn.disabled = running;
+  const complete =
+    entries.size > 0 &&
+    [...entries.values()].every((entry) => entry.state === "done" || entry.state === "error");
+  const canReveal = isConcealed() && complete && !running;
+  els.revealBtn.classList.toggle("hidden", !canReveal);
+  els.revealBtn.classList.toggle("flex", canReveal);
+}
+
+function rerenderIdentities() {
+  entries.forEach((entry) => renderCard(entry));
+  computeBests();
+}
+
+function toggleBlindMode() {
+  if (running) return;
+  blindMode = !blindMode;
+  localStorage.setItem(LS.blind, blindMode ? "1" : "0");
+  revealed = !blindMode;
+  if (blindMode && entries.size) {
+    setBlindOrder(shuffled([...entries.keys()]));
+    blindOrder.forEach((key) => {
+      const entry = entries.get(key);
+      if (entry) els.results.appendChild(entry.el);
+    });
+  }
+  refreshBlindUI();
+  rerenderIdentities();
+}
+els.blindBtn.addEventListener("click", toggleBlindMode);
+
+els.revealBtn.addEventListener("click", () => {
+  revealed = true;
+  if (currentBattleId) {
+    const battle = history.find((item) => battleId(item) === currentBattleId);
+    if (battle?.blind) {
+      battle.blind.revealed = true;
+      persistHistory();
+    }
+  }
+  refreshBlindUI();
+  rerenderIdentities();
+});
+
 /* ===================================================================== */
 /*  PROMPT + RUN button enablement                                       */
 /* ===================================================================== */
@@ -804,11 +713,21 @@ els.prompt.addEventListener("input", () => {
   localStorage.setItem(LS.prompt, els.prompt.value);
   syncRunBtn();
 });
+els.promptExamples.addEventListener("click", (event) => {
+  const button = (event.target as HTMLElement).closest<HTMLButtonElement>(
+    "[data-prompt-example]",
+  );
+  if (!button?.dataset.promptExample) return;
+  els.prompt.value = button.dataset.promptExample;
+  els.prompt.dispatchEvent(new Event("input"));
+  els.prompt.focus();
+});
 function syncRunBtn() {
   // Keep Run clickable so a first-time visitor can press it and be guided to
   // add their key / write a prompt (see runBattle). Only block it mid-run.
   els.runBtn.disabled = running;
   els.rerunAllBtn.disabled = running;
+  els.blindBtn.disabled = running;
   // "Re-run all" only matters once there are results to refresh.
   els.rerunAllBtn.classList.toggle("hidden", entries.size === 0);
 }
@@ -838,26 +757,49 @@ document.addEventListener("keydown", (e) => {
   // ⌘/Ctrl+Enter runs from anywhere (including the prompt field).
   if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
     e.preventDefault();
-    return runBattle();
+    els.runBtn.click();
+    return;
   }
   // Single-letter shortcuts: skip while typing or when a modifier is held.
   if (isTyping(e.target) || e.metaKey || e.ctrlKey || e.altKey) return;
   const map: Record<string, () => void> = {
-    o: () => setView("output"),
-    c: () => setView("code"),
-    p: () => setView("preview"),
-    r: () => runBattle(),
-    k: () => openKeyModal(),
-    m: () => toggleDropdown(),
+    o: () => els.viewControls.querySelector<HTMLButtonElement>('[data-mode="output"]')?.click(),
+    c: () => els.viewControls.querySelector<HTMLButtonElement>('[data-mode="code"]')?.click(),
+    p: () => els.viewControls.querySelector<HTMLButtonElement>('[data-mode="preview"]')?.click(),
+    r: () => els.runBtn.click(),
+    k: () => els.keyBtn.click(),
+    m: () => els.addBtn.click(),
     s: () => els.sysToggle.click(),
-    h: () => toggleHistory(),
-    l: () => toggleScrollLink(),
+    h: () => els.historyBtn.click(),
+    l: () => els.scrollBtn.click(),
+    b: () => els.blindBtn.click(),
     "/": () => els.prompt.focus(),
   };
   const fn = map[e.key.toLowerCase()];
   if (fn) {
     e.preventDefault();
     fn();
+  }
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Tab") return;
+  const dialog = [els.keyModal, els.historyDrawer].find(
+    (element) => !element.classList.contains("hidden"),
+  );
+  if (!dialog) return;
+  const focusable = [...dialog.querySelectorAll<HTMLElement>(
+    'a[href],button:not([disabled]),input:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])',
+  )].filter((element) => element.offsetParent !== null);
+  if (!focusable.length) return;
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
   }
 });
 
@@ -868,24 +810,35 @@ function statsRow(entry: Entry, best: Record<string, boolean> = {}) {
   if (entry.state !== "done" && entry.state !== "streaming") return "";
   if (entry.state === "streaming") {
     // No API token counts yet — estimate from the streamed text length.
-    // Reasoning counts too: it's generated (and timed) like any other output.
-    const out = estTokens(entry.reasoning + entry.raw);
+    const out = estTokens(entry.raw);
     const now = performance.now();
     const total = now - entry.startedAt;
     const gen = entry.firstTokenAt != null ? now - entry.firstTokenAt : 0;
     const cost = costFor(entry, entry.promptTokens, out);
     return statsRowHTML(
-      { durationMs: total, genMs: gen, promptTokens: entry.promptTokens, completionTokens: out, cost },
+      {
+        durationMs: total,
+        ttftMs: entry.firstTokenAt != null ? entry.firstTokenAt - entry.startedAt : 0,
+        genMs: gen,
+        promptTokens: entry.promptTokens,
+        completionTokens: out,
+        cost: cost ?? 0,
+        costKnown: cost !== null,
+        usageEstimated: true,
+      },
       { live: true },
     );
   }
   return statsRowHTML(
     {
       durationMs: entry.durationMs,
+      ttftMs: entry.ttftMs,
       genMs: entry.genMs,
       promptTokens: entry.promptTokens,
       completionTokens: entry.completionTokens,
       cost: entry.cost,
+      costKnown: entry.costKnown,
+      usageEstimated: entry.usageEstimated,
     },
     { best },
   );
@@ -922,7 +875,7 @@ function contentHTML(entry: Entry): string {
     // regardless of the selected view (code/preview need the finished doc).
     return `<div data-scroll class="result-scroll h-full overflow-auto p-3.5 text-[12px] leading-relaxed text-[var(--color-ink-dim)]">${thoughtsHTML(entry.reasoning, true)}<div class="whitespace-pre-wrap break-words"><span data-stream>${esc(entry.raw)}</span><span class="caret"></span></div></div>`;
   }
-  return doneContentHTML(entry, viewOf(entry));
+  return doneContentHTML({ ...entry, id: displayName(entry.key) }, viewOf(entry));
 }
 
 function renderContent(entry: Entry) {
@@ -932,17 +885,20 @@ function renderContent(entry: Entry) {
 
 function renderCard(entry: Entry, best: Record<string, boolean> = {}) {
   const hasCode = entry.state === "done" && !!entry.code;
+  const concealed = isConcealed();
+  const name = displayName(entry.key);
   entry.el.innerHTML = `
     <div class="flex items-center gap-2 px-3 py-2.5">
       <span class="size-2 shrink-0 rounded-full ${dotColor(entry.state)}"></span>
-      ${providerBadge(entry.provider)}
-      <span class="min-w-0 flex-1 truncate text-[12px] text-[var(--color-ink)]" title="${esc(entry.key)}">${esc(contenderName(entry.key))}</span>
+      ${concealed ? "" : providerBadge(entry.provider)}
+      <span class="min-w-0 flex-1 truncate text-[12px] text-[var(--color-ink)]"${concealed ? "" : ` title="${esc(entry.key)}"`}>${esc(name)}</span>
+      ${entry.cached ? `<span class="rounded border border-[var(--color-line)] px-1 py-0.5 text-[8px] uppercase text-[var(--color-ink-faint)]">cached</span>` : ""}
       ${
         hasCode
-          ? `<button data-action="open" data-model="${esc(entry.key)}" class="grid size-7 place-items-center rounded-md text-[var(--color-ink-faint)] transition-colors hover:bg-[var(--color-line)] hover:text-[var(--color-ink)]" title="open preview in new tab">${svg("i-expand", "size-4")}</button>`
+          ? `<button data-action="open" data-model="${esc(entry.key)}" aria-label="Open preview in a new tab" class="grid size-7 place-items-center rounded-md text-[var(--color-ink-faint)] transition-colors hover:bg-[var(--color-line)] hover:text-[var(--color-ink)]" title="open preview in new tab">${svg("i-expand", "size-4")}</button>`
           : ""
       }
-      <button data-action="rerun" data-model="${esc(entry.key)}" class="grid size-7 place-items-center rounded-md text-[var(--color-ink-faint)] transition-colors hover:bg-[var(--color-line)] hover:text-[var(--color-ink)] ${entry.state === "loading" ? "pointer-events-none opacity-40" : ""}" title="re-run this model">${svg("i-refresh", "size-4")}</button>
+      <button data-action="rerun" data-model="${esc(entry.key)}" aria-label="Re-run ${esc(name)}" ${entry.state === "loading" || entry.state === "streaming" ? "disabled" : ""} class="grid size-7 place-items-center rounded-md text-[var(--color-ink-faint)] transition-colors hover:bg-[var(--color-line)] hover:text-[var(--color-ink)] disabled:cursor-not-allowed disabled:opacity-40" title="re-run this model">${svg("i-refresh", "size-4")}</button>
     </div>
     <div data-stats>${statsRow(entry, best)}</div>
     <div data-content class="h-[clamp(22rem,52vh,42rem)] border-t border-[var(--color-line)] bg-[var(--color-surface)]"></div>`;
@@ -975,12 +931,51 @@ function newCard(key: string): Entry {
     cost: 0,
     durationMs: 0,
     genMs: 0,
+    ttftMs: 0,
+    usageEstimated: true,
+    costKnown: false,
+    metrics: [],
+    cached: false,
     prompt: "",
     system: "",
     el,
     startedAt: performance.now(),
   };
   return entry;
+}
+
+function recordMetricSample(entry: Entry, final = false) {
+  const tMs = final ? entry.durationMs : performance.now() - entry.startedAt;
+  let last = entry.metrics.at(-1);
+  if (!final && last && tMs - last.tMs < 250) return false;
+  if (final && last) {
+    const tokenScale =
+      last.completionTokens > 0 ? entry.completionTokens / last.completionTokens : 1;
+    const costScale = last.costKnown && last.cost > 0 && entry.costKnown ? entry.cost / last.cost : 1;
+    entry.metrics = entry.metrics.map((sample) => ({
+      ...sample,
+      completionTokens: Math.round(sample.completionTokens * tokenScale),
+      cost: sample.cost * costScale,
+    }));
+    last = entry.metrics.at(-1);
+  }
+  const completionTokens = final ? entry.completionTokens : estTokens(entry.raw);
+  const calculatedCost = final
+    ? entry.costKnown
+      ? entry.cost
+      : null
+    : costFor(entry, entry.promptTokens, completionTokens);
+  const sample: MetricSample = {
+    tMs: Math.max(0, tMs),
+    completionTokens,
+    cost: calculatedCost ?? 0,
+    costKnown: calculatedCost !== null,
+    estimated: final ? entry.usageEstimated : true,
+  };
+  if (final && last && Math.abs(last.tMs - sample.tMs) < 1) entry.metrics[entry.metrics.length - 1] = sample;
+  else entry.metrics.push(sample);
+  entry.metrics = downsampleMetricSamples(entry.metrics);
+  return true;
 }
 
 // Live update loop: ticks the loading clock, pumps streamed text into the
@@ -990,12 +985,6 @@ function flush(entry: Entry) {
   if (elapsed)
     elapsed.textContent = `${((performance.now() - entry.startedAt) / 1000).toFixed(1)}s`;
   if (entry.state !== "streaming") return;
-  const scroll = entry.el.querySelector("[data-scroll]") as HTMLElement | null;
-  // Measure BEFORE mutating content: only keep the view pinned to the bottom
-  // if the user was already there. If they scrolled up to read, leave them be.
-  const stick = scroll
-    ? scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight < 32
-    : false;
   if (entry.reasoning) {
     const rdiv = entry.el.querySelector("[data-reasoning]");
     if (rdiv) rdiv.textContent = entry.reasoning;
@@ -1003,9 +992,11 @@ function flush(entry: Entry) {
   }
   const span = entry.el.querySelector("[data-stream]");
   if (span) span.textContent = entry.raw;
-  if (scroll && stick) scroll.scrollTop = scroll.scrollHeight;
+  const scroll = entry.el.querySelector("[data-scroll]") as HTMLElement | null;
+  if (scroll) scroll.scrollTop = scroll.scrollHeight;
   const stats = entry.el.querySelector("[data-stats]");
   if (stats) stats.innerHTML = statsRow(entry);
+  if (recordMetricSample(entry)) refreshTimeline();
 }
 function startTimer(entry: Entry) {
   entry.startedAt = performance.now();
@@ -1030,7 +1021,17 @@ async function callModel(entry: Entry) {
   entry.reasoning = "";
   entry.code = entry.codeFmt = entry.codeHtml = entry.error = "";
   entry.firstTokenAt = undefined;
+  entry.promptTokens = 0;
+  entry.completionTokens = 0;
+  entry.totalTokens = 0;
+  entry.cost = 0;
+  entry.durationMs = 0;
   entry.genMs = 0;
+  entry.ttftMs = 0;
+  entry.usageEstimated = true;
+  entry.costKnown = false;
+  entry.metrics = [];
+  entry.cached = false;
   entry.view = undefined;
   renderCard(entry);
 
@@ -1046,18 +1047,25 @@ async function callModel(entry: Entry) {
     return;
   }
   startTimer(entry);
+  controllers.get(entry.key)?.abort();
+  const controller = new AbortController();
+  controllers.set(entry.key, controller);
   try {
     const res = await fetch(chatUrlFor(entry.provider), {
       method: "POST",
       headers: prov.headers(key),
       body: JSON.stringify(prov.body(entry.id, usedSystem, usedPrompt)),
+      signal: controller.signal,
     });
 
     if (!res.ok || !res.body) {
       let msg = `HTTP ${res.status} ${res.statusText}`;
       try {
-        const j = await res.json();
-        msg = j.error?.message || j.error || msg;
+        const j = (await res.json()) as {
+          error?: string | { message?: string };
+        };
+        msg =
+          (typeof j.error === "string" ? j.error : j.error?.message) || msg;
       } catch {}
       throw new Error(msg);
     }
@@ -1065,53 +1073,70 @@ async function callModel(entry: Entry) {
     // Streaming has begun — flip to the live view.
     entry.state = "streaming";
     entry.promptTokens = estTokens(usedSystem + usedPrompt);
+    const initialCost = costFor(entry, entry.promptTokens, 0);
+    entry.metrics = [
+      {
+        tMs: 0,
+        completionTokens: 0,
+        cost: initialCost ?? 0,
+        costKnown: initialCost !== null,
+        estimated: true,
+      },
+    ];
     renderCard(entry);
+    refreshTimeline();
 
     const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-    let usage: any = null;
+    const textDecoder = new TextDecoder();
+    const sse = new SSEDecoder();
+    let usage: UsageInfo = {};
     let streamError: string | null = null;
-
-    stream: while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop() || "";
-      for (const line of lines) {
-        const t = line.trim();
-        if (!t || t.startsWith(":")) continue; // keep-alive / comments
-        if (!t.startsWith("data:")) continue;
-        const data = t.slice(5).trim();
-        if (data === "[DONE]") break stream;
+    const processEvents = (events: SSEEvent[]): boolean => {
+      for (const event of events) {
+        const data = event.data.trim();
+        if (data === "[DONE]") return true;
         let json: any;
         try {
           json = JSON.parse(data);
         } catch {
           continue;
         }
-        if (json.error || json.type === "error") {
-          streamError = json.error?.message || json.error || "stream error";
-          break stream;
+        if (json.error || json.type === "error" || event.event === "error") {
+          streamError = json.error?.message || json.error || json.message || "stream error";
+          return true;
         }
-        // Reasoning (chain-of-thought) arrives before the answer.
         const parsed = prov.parse(json);
-        if (parsed.reasoning) {
-          if (entry.firstTokenAt == null) entry.firstTokenAt = performance.now();
+        if (parsed.reasoning || parsed.content) {
+          if (entry.firstTokenAt == null) {
+            entry.firstTokenAt = performance.now();
+            entry.ttftMs = entry.firstTokenAt - entry.startedAt;
+          }
           entry.reasoning += parsed.reasoning;
-        }
-        if (parsed.content) {
-          if (entry.firstTokenAt == null) entry.firstTokenAt = performance.now();
           entry.raw += parsed.content;
         }
         if (parsed.usage) usage = { ...usage, ...parsed.usage };
+      }
+      return false;
+    };
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        processEvents(sse.finish(textDecoder.decode()));
+        break;
+      }
+      const shouldStop = processEvents(sse.push(textDecoder.decode(value, { stream: true })));
+      if (shouldStop) {
+        await reader.cancel();
+        break;
       }
     }
 
     const end = performance.now();
     entry.durationMs = end - entry.startedAt;
     entry.genMs = entry.firstTokenAt != null ? end - entry.firstTokenAt : entry.durationMs;
+    entry.ttftMs =
+      entry.firstTokenAt != null ? entry.firstTokenAt - entry.startedAt : entry.durationMs;
     if (streamError && !entry.raw) throw new Error(streamError);
 
     entry.code = extractCode(entry.raw);
@@ -1119,50 +1144,137 @@ async function callModel(entry: Entry) {
       entry.codeFmt = formatCode(entry.code);
       entry.codeHtml = highlightCode(entry.codeFmt);
     }
+    entry.usageEstimated =
+      typeof usage.completion_tokens !== "number" || typeof usage.prompt_tokens !== "number";
     // The API's completion_tokens already includes reasoning; our fallback
     // estimate must add it too so throughput isn't understated.
-    entry.completionTokens = usage?.completion_tokens || estTokens(entry.reasoning + entry.raw);
-    entry.promptTokens = usage?.prompt_tokens || entry.promptTokens;
+    entry.completionTokens = usage.completion_tokens ?? estTokens(entry.reasoning + entry.raw);
+    entry.promptTokens = usage.prompt_tokens ?? entry.promptTokens;
     entry.totalTokens =
-      usage?.total_tokens || entry.promptTokens + entry.completionTokens;
-    entry.cost =
-      typeof usage?.cost === "number"
+      usage.total_tokens ?? entry.promptTokens + entry.completionTokens;
+    const calculatedCost =
+      typeof usage.cost === "number"
         ? usage.cost
         : costFor(entry, entry.promptTokens, entry.completionTokens);
+    entry.costKnown = calculatedCost !== null;
+    entry.cost = calculatedCost ?? 0;
 
     entry.state = entry.raw ? "done" : "error";
     if (!entry.raw) entry.error = streamError || "Model returned an empty response.";
-    // When a block finishes while you're on the Output view, flip just that
-    // block to Preview so its solution is shown.
-    if (entry.state === "done" && entry.code && viewMode === "output")
-      entry.view = "preview";
-  } catch (err: any) {
+  } catch (err: unknown) {
     entry.durationMs = performance.now() - entry.startedAt;
     entry.genMs = entry.firstTokenAt != null ? performance.now() - entry.firstTokenAt : entry.durationMs;
+    entry.ttftMs =
+      entry.firstTokenAt != null ? entry.firstTokenAt - entry.startedAt : entry.durationMs;
     entry.state = "error";
-    entry.error = err?.message || "Request failed.";
+    entry.completionTokens = estTokens(entry.raw);
+    entry.totalTokens = entry.promptTokens + entry.completionTokens;
+    const calculatedCost = costFor(entry, entry.promptTokens, entry.completionTokens);
+    entry.costKnown = calculatedCost !== null;
+    entry.cost = calculatedCost ?? 0;
+    const message = err instanceof Error ? err.message : "Request failed.";
+    entry.error =
+      message === "Failed to fetch"
+        ? `Browser access to ${prov.name} was blocked (likely CORS). Try the same model through OpenRouter.`
+        : message === "This operation was aborted"
+          ? "Request cancelled."
+          : message;
   } finally {
+    if (controllers.get(entry.key) === controller) controllers.delete(entry.key);
     stopTimer(entry);
+    if (entry.state === "done" || entry.metrics.length) recordMetricSample(entry, true);
     renderCard(entry);
+    refreshComparison();
   }
+}
+
+function summaryEntries() {
+  return [...entries.values()].map((entry) => {
+    const latest = entry.metrics.at(-1);
+    const live = entry.state === "streaming";
+    return {
+      key: entry.key,
+      id: displayName(entry.key),
+      provider: isConcealed() ? undefined : entry.provider,
+      label: displayName(entry.key),
+      state: entry.state,
+      durationMs: live ? performance.now() - entry.startedAt : entry.durationMs,
+      ttftMs: entry.ttftMs,
+      genMs: entry.genMs,
+      completionTokens: live ? latest?.completionTokens || 0 : entry.completionTokens,
+      cost: live ? latest?.cost || 0 : entry.cost,
+      costKnown: live ? latest?.costKnown : entry.costKnown,
+      usageEstimated: live || entry.usageEstimated,
+      cached: entry.cached,
+      concealed: isConcealed(),
+      metrics: entry.metrics,
+    };
+  });
+}
+
+function refreshProgress() {
+  const all = [...entries.values()];
+  const complete = all.filter((entry) => entry.state === "done" || entry.state === "error").length;
+  els.status.textContent = running ? `${complete}/${all.length} complete` : "";
+  els.status.classList.toggle("hidden", !running);
+}
+
+function refreshComparison() {
+  const results = summaryEntries();
+  els.summary.classList.toggle("hidden", results.length === 0);
+  els.summaryList.innerHTML = renderBattleSummary(results);
+  refreshTimeline(results);
+  refreshProgress();
+  refreshBlindUI();
+}
+
+function refreshTimeline(results = summaryEntries()) {
+  els.timeline.innerHTML = renderMetricsTimeline(results);
+  els.insights.innerHTML = renderBattleInsights(results);
 }
 
 function computeBests() {
   const done = [...entries.values()].filter((e) => e.state === "done");
-  if (done.length < 2) return;
+  if (done.length < 2) {
+    refreshComparison();
+    return;
+  }
   const rate = (e: Entry) => e.completionTokens / (e.genMs || e.durationMs || 1);
+  const knownCosts = done.filter((entry) => entry.costKnown);
   const best = {
     fast: done.reduce((a, b) => (b.durationMs < a.durationMs ? b : a)),
-    cheap: done.reduce((a, b) => (b.cost < a.cost ? b : a)),
+    ttft: done.reduce((a, b) => (b.ttftMs < a.ttftMs ? b : a)),
+    gen: done.reduce((a, b) => (b.genMs < a.genMs ? b : a)),
+    cheap: knownCosts.length
+      ? knownCosts.reduce((a, b) => (b.cost < a.cost ? b : a))
+      : null,
     tput: done.reduce((a, b) => (rate(b) > rate(a) ? b : a)),
   };
   for (const e of done) {
     renderCard(e, {
       fast: e === best.fast,
-      cheap: e === best.cheap && e.cost > 0,
+      ttft: e === best.ttft,
+      gen: e === best.gen,
+      cheap: e === best.cheap,
       tput: e === best.tput,
     });
   }
+  refreshComparison();
+}
+
+async function runWithConcurrency<T>(
+  items: T[],
+  limit: number,
+  worker: (item: T) => Promise<void>,
+) {
+  let next = 0;
+  const runners = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (next < items.length) {
+      const item = items[next++];
+      await worker(item);
+    }
+  });
+  await Promise.allSettled(runners);
 }
 
 // force = true re-runs every selected model (ignores the cache). Otherwise we
@@ -1171,9 +1283,10 @@ function computeBests() {
 async function runBattle(force = false) {
   if (running) return;
   // Guide the user instead of silently doing nothing.
+  if (!anyKey()) return openKeyModal("Add at least one API key to get started.");
   if (!selected.length) return toggleDropdown(true);
   const neededProviders = [...new Set(selected.map((k) => parseKey(k).provider))];
-  if (!neededProviders.some((p) => keyFor(p).trim())) return openKeyModal();
+  if (!neededProviders.every((p) => keyFor(p).trim())) return openKeyModal();
   const prompt = els.prompt.value.trim();
   if (!prompt) {
     els.prompt.focus();
@@ -1181,6 +1294,11 @@ async function runBattle(force = false) {
   }
 
   els.empty.classList.add("hidden");
+  currentBattleId = null;
+  resetSharePanel();
+  const runOrder = blindMode ? shuffled(selected) : [...selected];
+  revealed = !blindMode;
+  setBlindOrder(runOrder);
 
   // Drop cards for models that are no longer selected.
   for (const [id, e] of [...entries]) {
@@ -1193,7 +1311,7 @@ async function runBattle(force = false) {
   // Reconcile: keep fresh results, (re)build everything that needs a call.
   const toRun: Entry[] = [];
   let reused = 0;
-  for (const id of selected) {
+  for (const id of runOrder) {
     const cur = entries.get(id);
     const canReuse =
       !force &&
@@ -1203,6 +1321,7 @@ async function runBattle(force = false) {
       cur.system === systemPrompt;
     if (canReuse) {
       els.results.appendChild(cur!.el); // reorder to selection order
+      cur!.cached = true;
       reused++;
       continue;
     }
@@ -1214,7 +1333,15 @@ async function runBattle(force = false) {
     toRun.push(entry);
   }
 
+  requestAnimationFrame(() => {
+    els.results.querySelector<HTMLElement>(".result-card")?.scrollIntoView({
+      behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+      block: "start",
+    });
+  });
+
   if (!toRun.length) {
+    play("success");
     computeBests(); // everything was cached — no API calls made
     return;
   }
@@ -1225,24 +1352,19 @@ async function runBattle(force = false) {
   els.runLabel.textContent = "Running…";
   els.runIcon.innerHTML = `<use href="#i-refresh"></use>`;
   els.runIcon.classList.add("spin");
+  refreshComparison();
 
-  await Promise.allSettled(toRun.map((e) => callModel(e)));
-
-  // Keep the finished blocks consistent — show every solution as a preview.
-  if (viewMode === "output")
-    for (const e of entries.values())
-      if (e.state === "done" && e.code && e.view !== "preview") {
-        e.view = "preview";
-        renderCard(e);
-      }
-
-  computeBests();
-  saveBattle();
+  await runWithConcurrency(toRun, 3, callModel);
 
   running = false;
+  if (toRun.some((entry) => entry.state === "done")) play("success");
   els.runLabel.textContent = "Run battle";
   els.runIcon.innerHTML = `<use href="#i-play"></use>`;
   els.runIcon.classList.remove("spin");
+  if (viewMode === "output" && [...entries.values()].some((entry) => entry.code))
+    setView("preview");
+  computeBests();
+  saveBattle();
   syncRunBtn();
 }
 
@@ -1250,37 +1372,32 @@ async function runBattle(force = false) {
 els.results.addEventListener("click", async (e) => {
   const btn = (e.target as HTMLElement).closest("[data-action]") as HTMLElement;
   if (!btn) return;
-  const action = btn.dataset.action;
-
-  // Restart the preview without spending tokens — just reload the iframe.
-  // Handled via DOM traversal (not the `entries` map) because this button
-  // carries the raw model id, not the composite key the map is keyed by.
-  if (action === "reload-preview") {
-    const f = btn.parentElement?.querySelector(
-      "iframe[data-preview]",
-    ) as HTMLIFrameElement | null;
-    if (f) f.srcdoc = f.srcdoc;
-    return;
-  }
-
   const entry = entries.get(btn.dataset.model!);
   if (!entry) return;
+  const action = btn.dataset.action;
 
   if (action === "copy" && entry.code) {
     await navigator.clipboard.writeText(entry.codeFmt || entry.code);
+    play("success");
     const span = btn.querySelector("span");
     if (span) {
       const prev = span.textContent;
       span.textContent = "copied";
       setTimeout(() => (span.textContent = prev), 1200);
     }
+  } else if (action === "reload-preview") {
+    // Restart the demo without spending tokens — just reload the iframe.
+    const f = entry.el.querySelector("iframe[data-preview]") as HTMLIFrameElement | null;
+    if (f) f.srcdoc = f.srcdoc;
   } else if (action === "rerun") {
     if (!keyFor(entry.provider).trim()) return openKeyModal();
     await callModel(entry);
     computeBests();
   } else if (action === "open" && entry.code) {
     const blob = new Blob([entry.code], { type: "text/html" });
-    window.open(URL.createObjectURL(blob), "_blank");
+    const url = URL.createObjectURL(blob);
+    window.open(url, "_blank");
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
   }
 });
 
@@ -1291,11 +1408,95 @@ els.results.addEventListener("click", async (e) => {
 let history: Battle[] = loadHistory();
 let battleSeq = 0;
 const battleId = (b: Battle) => b.id || String(b.ts);
+const publicBattleUrl = (id: string) => {
+  const url = new URL("/battle", location.origin);
+  url.searchParams.set("id", id);
+  return url.toString();
+};
 
 function persistHistory() {
   history = saveHistory(history);
   updateHistoryCount();
 }
+
+function resetSharePanel() {
+  els.sharePanel.classList.add("hidden");
+  els.shareStatus.classList.add("hidden");
+  els.shareStatus.textContent = "";
+  els.shareBtn.disabled = false;
+  els.shareBtn.querySelector("span")!.textContent = "Publish results";
+  els.shareBtn.querySelector("use")!.setAttribute("href", "#i-world");
+}
+
+function showSharePanel(battle: Battle) {
+  if (!battle.results.some((result) => result.state === "done")) {
+    resetSharePanel();
+    return;
+  }
+  els.sharePanel.classList.remove("hidden");
+  els.shareBtn.disabled = false;
+  if (!battle.sharedId) {
+    els.shareStatus.classList.add("hidden");
+    els.shareStatus.textContent = "";
+    els.shareBtn.querySelector("span")!.textContent = "Publish results";
+    els.shareBtn.querySelector("use")!.setAttribute("href", "#i-world");
+    return;
+  }
+  const url = publicBattleUrl(battle.sharedId);
+  els.shareStatus.className = "mt-2 text-[11px] text-emerald-400";
+  els.shareStatus.innerHTML = `Published. <a class="underline underline-offset-2 hover:text-emerald-300" href="${esc(url)}" target="_blank" rel="noopener">Open public battle</a>`;
+  els.shareBtn.querySelector("span")!.textContent = "Copy link";
+  els.shareBtn.querySelector("use")!.setAttribute("href", "#i-copy");
+}
+
+async function copyPublicBattleUrl(id: string) {
+  await navigator.clipboard.writeText(publicBattleUrl(id));
+  play("success");
+  els.shareStatus.className = "mt-2 text-[11px] text-emerald-400";
+  els.shareStatus.textContent = "Public link copied to your clipboard.";
+}
+
+els.shareBtn.addEventListener("click", async () => {
+  const battle = history.find((item) => battleId(item) === currentBattleId);
+  if (!battle) return;
+  if (battle.sharedId) {
+    try {
+      await copyPublicBattleUrl(battle.sharedId);
+    } catch {
+      showSharePanel(battle);
+    }
+    return;
+  }
+
+  els.shareBtn.disabled = true;
+  els.shareBtn.querySelector("span")!.textContent = "Publishing…";
+  els.shareStatus.className = "mt-2 text-[11px] text-[var(--color-ink-faint)]";
+  els.shareStatus.textContent = "Uploading the public results…";
+  try {
+    const response = await fetch("/api/battles", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(toSharedBattleData(battle)),
+    });
+    const data = (await response.json()) as { id?: string; error?: string };
+    if (!response.ok || !data.id)
+      throw new Error(data.error || "Could not publish this battle.");
+    battle.sharedId = data.id;
+    persistHistory();
+    showSharePanel(battle);
+    try {
+      await copyPublicBattleUrl(data.id);
+    } catch {
+      showSharePanel(battle);
+    }
+  } catch (error) {
+    els.shareBtn.disabled = false;
+    els.shareBtn.querySelector("span")!.textContent = "Try again";
+    els.shareStatus.className = "mt-2 text-[11px] text-red-400";
+    els.shareStatus.textContent =
+      error instanceof Error ? error.message : "Could not publish this battle.";
+  }
+});
 
 function updateHistoryCount() {
   const n = history.length;
@@ -1310,6 +1511,7 @@ function saveBattle() {
     .filter((e) => e.state === "done" || e.state === "error")
     .map((e) => ({
       id: e.id,
+      key: e.key,
       provider: e.provider,
       label: contenderName(e.key),
       raw: e.raw,
@@ -1321,19 +1523,35 @@ function saveBattle() {
       completionTokens: e.completionTokens,
       totalTokens: e.totalTokens,
       cost: e.cost,
+      costKnown: e.costKnown,
+      usageEstimated: e.usageEstimated,
       durationMs: e.durationMs,
+      ttftMs: e.ttftMs,
       genMs: e.genMs,
+      metrics: downsampleMetricSamples(e.metrics),
     }));
   if (!results.length) return;
   const ts = Date.now();
-  history.unshift({
-    id: `${ts}-${(battleSeq++).toString(36)}`,
+  currentBattleId = `${ts}-${(battleSeq++).toString(36)}`;
+  const battle: Battle = {
+    id: currentBattleId,
+    schemaVersion: 3,
     ts,
     prompt: els.prompt.value.trim(),
     system: systemPrompt,
     results,
-  });
+    blind: blindMode
+      ? {
+          enabled: true,
+          revealed,
+          order: [...blindOrder],
+          aliases: Object.fromEntries(blindAliases),
+        }
+      : undefined,
+  };
+  history.unshift(battle);
   persistHistory();
+  showSharePanel(battle);
 }
 
 function renderHistory() {
@@ -1354,32 +1572,32 @@ function renderHistory() {
       const fastest = ok.length
         ? ok.reduce((a, c) => (c.durationMs < a.durationMs ? c : a))
         : null;
-      const cheapest = ok.length
-        ? ok.reduce((a, c) => (c.cost < a.cost ? c : a))
+      const knownCosts = ok.filter((result) => result.costKnown !== false);
+      const cheapest = knownCosts.length
+        ? knownCosts.reduce((a, c) => (c.cost < a.cost ? c : a))
         : null;
-      const lbl = (r: HistoryResult) => esc(r.label || r.id);
+      const concealed = !!b.blind?.enabled && !b.blind.revealed;
+      const lbl = (r: HistoryResult) => {
+        const key = r.key || `${r.provider || "openrouter"}::${r.id}`;
+        return esc(concealed ? b.blind?.aliases[key] || "Model ?" : r.label || r.id);
+      };
       const chips = b.results
         .map(
           (r) => `
         <span class="inline-flex items-center gap-1 rounded border border-[var(--color-line)] px-1.5 py-0.5 text-[10px] ${r.state === "error" ? "text-red-400/80" : "text-[var(--color-ink-dim)]"}">
-          ${r.provider ? providerBadge(r.provider) : `<span class="size-1 rounded-full ${r.state === "error" ? "bg-red-500" : "bg-emerald-400"}"></span>`}${lbl(r)}
+          ${!concealed && r.provider ? providerBadge(r.provider) : `<span class="size-1 rounded-full ${r.state === "error" ? "bg-red-500" : "bg-emerald-400"}"></span>`}${lbl(r)}
         </span>`,
         )
         .join("");
       return `
-      <a href="/battle?id=${encodeURIComponent(id)}" class="group mb-2 block rounded-xl border border-[var(--color-line)] bg-[var(--color-surface)] p-3 transition-colors hover:border-[var(--color-line-hi)]">
-        <div class="flex items-center justify-between gap-2">
+      <div class="group relative mb-2 rounded-xl border border-[var(--color-line)] bg-[var(--color-surface)] transition-colors hover:border-[var(--color-line-hi)]">
+       <a href="/battle?id=${encodeURIComponent(id)}" class="block p-3 pr-11">
+        <div class="flex items-center justify-between gap-2 pr-8">
           <span class="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-[var(--color-ink-faint)]">
             <svg class="size-3"><use href="#i-clock"></use></svg>${fmtWhen(b.ts)}
+            ${concealed ? `<span class="rounded border border-[var(--color-accent)]/30 px-1 py-0.5 text-[8px] text-[var(--color-accent)]">blind</span>` : ""}
           </span>
-          <div class="flex items-center gap-1">
-            <span class="flex items-center gap-1 rounded-md border border-[var(--color-line)] px-2 py-1 text-[10px] text-[var(--color-ink-dim)] transition-colors group-hover:border-[var(--color-accent)] group-hover:text-[var(--color-ink)]">
-              <svg class="size-3.5"><use href="#i-restore"></use></svg>open
-            </span>
-            <button data-del="${esc(id)}" class="grid size-6 place-items-center rounded-md text-[var(--color-ink-faint)] transition-colors hover:bg-[var(--color-line)] hover:text-red-400" title="delete">
-              <svg class="size-3.5"><use href="#i-trash"></use></svg>
-            </button>
-          </div>
+          <span class="flex items-center gap-1 text-[10px] text-[var(--color-ink-dim)]"><svg class="size-3.5"><use href="#i-restore"></use></svg>open</span>
         </div>
         <p class="mt-2 line-clamp-2 text-[12px] text-[var(--color-ink)]">${b.prompt ? esc(b.prompt) : '<span class="text-[var(--color-ink-faint)]">(empty prompt)</span>'}</p>
         <div class="mt-2 flex flex-wrap gap-1">${chips}</div>
@@ -1387,11 +1605,15 @@ function renderHistory() {
           ok.length
             ? `<div class="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-[var(--color-ink-faint)]">
                 <span class="inline-flex items-center gap-1"><svg class="size-3"><use href="#i-clock"></use></svg>${fmtDur(fastest!.durationMs)} · ${lbl(fastest!)}</span>
-                <span class="inline-flex items-center gap-1"><svg class="size-3"><use href="#i-coin"></use></svg>${fmtCost(cheapest!.cost)} · ${lbl(cheapest!)}</span>
+                ${cheapest ? `<span class="inline-flex items-center gap-1"><svg class="size-3"><use href="#i-coin"></use></svg>${fmtCost(cheapest.cost)} · ${lbl(cheapest)}</span>` : ""}
               </div>`
             : ""
         }
-      </a>`;
+       </a>
+       <button data-del="${esc(id)}" aria-label="Delete battle" class="absolute right-3 top-3 grid size-7 place-items-center rounded-md text-[var(--color-ink-faint)] transition-colors hover:bg-[var(--color-line)] hover:text-red-400" title="delete">
+         <svg class="size-3.5"><use href="#i-trash"></use></svg>
+       </button>
+      </div>`;
     })
     .join("");
 }
@@ -1407,19 +1629,17 @@ function clearHistory() {
   renderHistory();
 }
 function openHistory() {
+  dialogReturnFocus = document.activeElement as HTMLElement | null;
   renderHistory();
   els.historyDrawer.classList.remove("hidden");
   requestAnimationFrame(() => els.historyPanel.classList.remove("translate-x-full"));
+  setTimeout(() => els.historyClose.focus(), 30);
 }
 function closeHistory() {
   els.historyPanel.classList.add("translate-x-full");
   setTimeout(() => els.historyDrawer.classList.add("hidden"), 300);
+  dialogReturnFocus?.focus();
 }
-function toggleHistory() {
-  if (els.historyDrawer.classList.contains("hidden")) openHistory();
-  else closeHistory();
-}
-
 els.historyBtn.addEventListener("click", openHistory);
 els.historyClose.addEventListener("click", closeHistory);
 els.historyBackdrop.addEventListener("click", closeHistory);
@@ -1438,6 +1658,9 @@ els.historyList.addEventListener("click", (e) => {
 refreshKeyUI();
 refreshViewTabs();
 refreshScrollBtn();
+refreshBlindUI();
 syncRunBtn();
 updateHistoryCount();
+installMetricTooltips();
+installTimelineTracking();
 loadModels();

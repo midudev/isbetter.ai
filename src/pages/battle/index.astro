@@ -7,12 +7,12 @@ import Layout from "../../layouts/Layout.astro";
 		<!-- ================================ HEADER ================================ -->
 		<header class="flex items-center justify-between gap-4 py-5">
 			<a href="/" class="flex items-center gap-3 transition-opacity hover:opacity-80">
-				<span class="grid size-9 place-items-center rounded-md bg-[var(--color-accent)] text-black shadow-[0_0_24px_-4px_var(--color-accent)]">
-					<svg class="icon-fill size-5"><use href="#i-bolt"></use></svg>
+				<span class="grid size-9 shrink-0 place-items-center rounded-md border border-[var(--color-accent)]/30 bg-[var(--color-panel-hi)] shadow-[0_0_24px_-8px_var(--color-accent)]">
+					<img src="/favicon.svg" alt="" class="size-6" />
 				</span>
 				<div class="leading-none">
-					<h1 class="font-pixel text-[15px] tracking-[0.12em] text-[var(--color-ink)]">AI&nbsp;BATTLE</h1>
-					<p class="mt-1 text-[10px] uppercase tracking-[0.28em] text-[var(--color-ink-faint)]">battle&nbsp;review</p>
+					<h1 class="font-pixel text-[12px] tracking-[0.08em] text-[var(--color-ink)] sm:text-[14px]">Compare AI Models Side by Side</h1>
+					<p class="mt-1 text-[10px] uppercase tracking-[0.28em] text-[var(--color-ink-faint)]">battle review</p>
 				</div>
 			</a>
 			<a
@@ -35,7 +35,7 @@ import Layout from "../../layouts/Layout.astro";
 				<div class="max-w-sm">
 					<p class="font-pixel text-[13px] tracking-[0.1em] text-[var(--color-ink-dim)]">battle not found</p>
 					<p class="mt-2 text-[12px] leading-relaxed text-[var(--color-ink-faint)]">
-						This battle isn't in your history (it lives only in the browser it was run in).
+						This local or public battle could not be found. Check that the shared link is complete.
 					</p>
 					<a href="/" class="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-accent)] px-4 py-2 text-[12px] font-medium text-black transition-opacity hover:opacity-90">
 						<svg class="icon-fill size-4"><use href="#i-bolt"></use></svg>
@@ -62,17 +62,17 @@ import Layout from "../../layouts/Layout.astro";
 						role="tablist"
 						aria-label="View mode"
 					>
-						<button data-mode="output" class="view-tab flex items-center gap-1.5 rounded-md py-1.5 pl-3 pr-2 text-[12px] text-[var(--color-ink-dim)] transition-colors" title="Output — the AI's answer  ·  shortcut: O">
+						<button role="tab" aria-controls="results" data-mode="output" class="view-tab flex items-center gap-1.5 rounded-md py-1.5 pl-3 pr-2 text-[12px] text-[var(--color-ink-dim)] transition-colors" title="Output — the AI's answer  ·  shortcut: O">
 							<svg class="size-4"><use href="#i-text"></use></svg>
 							<span class="hidden sm:inline">Output</span>
 							<kbd class="hidden h-[1.05rem] min-w-[1.05rem] items-center justify-center rounded-[4px] border border-b-2 border-[var(--color-line-hi)] bg-[var(--color-surface)] px-1 font-mono text-[9px] leading-none text-[var(--color-ink-faint)] sm:inline-flex">O</kbd>
 						</button>
-						<button data-mode="code" class="view-tab flex items-center gap-1.5 rounded-md py-1.5 pl-3 pr-2 text-[12px] text-[var(--color-ink-dim)] transition-colors" title="Code — the generated source  ·  shortcut: C">
+						<button role="tab" aria-controls="results" data-mode="code" class="view-tab flex items-center gap-1.5 rounded-md py-1.5 pl-3 pr-2 text-[12px] text-[var(--color-ink-dim)] transition-colors" title="Code — the generated source  ·  shortcut: C">
 							<svg class="size-4"><use href="#i-code"></use></svg>
 							<span class="hidden sm:inline">Code</span>
 							<kbd class="hidden h-[1.05rem] min-w-[1.05rem] items-center justify-center rounded-[4px] border border-b-2 border-[var(--color-line-hi)] bg-[var(--color-surface)] px-1 font-mono text-[9px] leading-none text-[var(--color-ink-faint)] sm:inline-flex">C</kbd>
 						</button>
-						<button data-mode="preview" class="view-tab flex items-center gap-1.5 rounded-md py-1.5 pl-3 pr-2 text-[12px] text-[var(--color-ink-dim)] transition-colors" title="Preview — live render  ·  shortcut: P">
+						<button role="tab" aria-controls="results" data-mode="preview" class="view-tab flex items-center gap-1.5 rounded-md py-1.5 pl-3 pr-2 text-[12px] text-[var(--color-ink-dim)] transition-colors" title="Preview — live render  ·  shortcut: P">
 							<svg class="size-4"><use href="#i-browser"></use></svg>
 							<span class="hidden sm:inline">Preview</span>
 							<kbd class="hidden h-[1.05rem] min-w-[1.05rem] items-center justify-center rounded-[4px] border border-b-2 border-[var(--color-line-hi)] bg-[var(--color-surface)] px-1 font-mono text-[9px] leading-none text-[var(--color-ink-faint)] sm:inline-flex">P</kbd>
@@ -87,22 +87,54 @@ import Layout from "../../layouts/Layout.astro";
 					>
 						<svg class="size-4"><use href="#i-link"></use></svg>
 						<span class="hidden sm:inline">Scroll link</span>
+						<span id="scroll-link-check" class="grid size-4 place-items-center rounded border border-[var(--color-line-hi)] text-transparent" aria-hidden="true">
+							<svg class="size-3"><use href="#i-check"></use></svg>
+						</span>
 						<kbd class="hidden h-[1.05rem] min-w-[1.05rem] items-center justify-center rounded-[4px] border border-b-2 border-[var(--color-line-hi)] bg-[var(--color-surface)] px-1 font-mono text-[9px] leading-none text-[var(--color-ink-faint)] sm:inline-flex">L</kbd>
+					</button>
+					<button
+						id="reveal-models-btn"
+						class="hidden items-center gap-1.5 rounded-lg border border-[var(--color-accent)]/40 bg-[var(--color-accent)]/10 px-2.5 py-1.5 text-[12px] text-[var(--color-accent)] transition-colors hover:bg-[var(--color-accent)]/15"
+						title="Reveal model identities"
+					>
+						<svg class="size-4"><use href="#i-eye"></use></svg>
+						<span>Reveal models</span>
 					</button>
 				</div>
 			</section>
 
-			<section id="results" class="grid gap-4 py-6 grid-cols-[repeat(auto-fill,minmax(22rem,1fr))]"></section>
+			<section id="results" role="tabpanel" class="grid gap-4 py-6 grid-cols-[repeat(auto-fill,minmax(min(22rem,100%),1fr))]"></section>
+			<section id="battle-summary" class="mb-6 overflow-hidden rounded-xl border border-[var(--color-line)] bg-[var(--color-panel)]/70">
+				<header class="flex flex-wrap items-center gap-3 border-b border-[var(--color-line)] px-4 py-3">
+					<svg class="size-4 text-[var(--color-accent)]"><use href="#i-trophy"></use></svg>
+					<h2 class="text-[11px] uppercase tracking-[0.18em] text-[var(--color-ink-dim)]">Battle summary</h2>
+				</header>
+				<div class="grid border-b border-[var(--color-line)] lg:grid-cols-[minmax(0,2fr)_minmax(16rem,1fr)]">
+					<div id="battle-timeline" class="min-w-0 border-b border-[var(--color-line)] lg:border-b-0 lg:border-r"></div>
+					<aside id="battle-insights"></aside>
+				</div>
+				<div id="battle-summary-list" class="overflow-x-auto"></div>
+			</section>
 		</div>
 
-		<footer class="mt-auto flex items-center justify-between gap-2 border-t border-[var(--color-line)] py-4 text-[10px] uppercase tracking-[0.2em] text-[var(--color-ink-faint)]">
+		<footer class="mt-auto flex flex-col items-start gap-3 border-t border-[var(--color-line)] py-4 text-[10px] uppercase tracking-[0.2em] text-[var(--color-ink-faint)] sm:flex-row sm:items-center sm:justify-between">
 			<span class="flex items-center gap-1.5">
 				<span>developed with</span>
 				<svg class="size-3.5 text-[var(--color-accent)]"><use href="#i-heart"></use></svg>
 				<span>by</span>
 				<a href="https://midu.dev" target="_blank" rel="noopener" class="text-[var(--color-ink-dim)] underline-offset-2 transition-colors hover:text-[var(--color-ink)] hover:underline">midudev</a>
 			</span>
-			<a href="/" class="hidden underline-offset-2 hover:text-[var(--color-ink-dim)] hover:underline sm:inline">back to arena</a>
+			<div class="flex flex-wrap items-center gap-x-4 gap-y-2 sm:justify-end">
+				<a
+					href="https://github.com/sponsors/midudev"
+					target="_blank"
+					rel="noopener"
+					class="text-[var(--color-accent)] underline-offset-2 transition-opacity hover:underline hover:opacity-80"
+				>
+					Keep AI Battle free — support the project
+				</a>
+				<a href="/" class="hidden border-l border-[var(--color-line-hi)] pl-4 underline-offset-2 hover:text-[var(--color-ink-dim)] hover:underline lg:inline">back to arena</a>
+			</div>
 		</footer>
 	</div>
 </Layout>

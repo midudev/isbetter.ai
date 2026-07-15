@@ -1,5 +1,25 @@
 ---
 import Layout from "../layouts/Layout.astro";
+import { PROVIDER_LIST } from "../scripts/providers/registry";
+
+const PROMPT_EXAMPLES = [
+	{
+		label: "Pricing page",
+		prompt: "Build a responsive SaaS pricing page with three tiers, a monthly/yearly billing toggle, a feature comparison, and a clear highlighted plan.",
+	},
+	{
+		label: "Analytics dashboard",
+		prompt: "Build a polished analytics dashboard with KPI cards, an interactive revenue chart, a recent activity feed, and a responsive sidebar.",
+	},
+	{
+		label: "Kanban board",
+		prompt: "Build an interactive Kanban board with draggable task cards, three workflow columns, priority labels, and a form to add new tasks.",
+	},
+	{
+		label: "Music player",
+		prompt: "Build a modern music player with album artwork, playback controls, a seek bar, volume control, and an interactive track queue.",
+	},
+];
 ---
 
 <Layout>
@@ -7,31 +27,23 @@ import Layout from "../layouts/Layout.astro";
 		<!-- ================================ HEADER ================================ -->
 		<header class="flex items-center justify-between gap-4 py-5">
 			<div class="flex items-center gap-3">
-				<span class="grid size-9 place-items-center rounded-md bg-[var(--color-accent)] text-black shadow-[0_0_24px_-4px_var(--color-accent)]">
-					<svg class="icon-fill size-5"><use href="#i-bolt"></use></svg>
+				<span class="grid size-9 shrink-0 place-items-center rounded-md border border-[var(--color-accent)]/30 bg-[var(--color-panel-hi)] shadow-[0_0_24px_-8px_var(--color-accent)]">
+					<img src="/favicon.svg" alt="" class="size-6" />
 				</span>
 				<div class="leading-none">
-					<h1 class="font-pixel text-[15px] tracking-[0.12em] text-[var(--color-ink)]">
-						AI&nbsp;BATTLE
+					<h1 class="font-pixel text-[12px] tracking-[0.08em] text-[var(--color-ink)] sm:text-[14px]">
+						Compare AI Models Side by Side
 					</h1>
 					<p class="mt-1 text-[10px] uppercase tracking-[0.28em] text-[var(--color-ink-faint)]">
-						model&nbsp;arena
+						AI model comparison tool
 					</p>
 				</div>
 			</div>
 
 			<div class="flex items-center gap-2">
-				<a
-					href="https://openrouter.ai/models"
-					target="_blank"
-					rel="noopener"
-					class="hidden items-center gap-1.5 rounded-md border border-[var(--color-line)] px-2.5 py-2 text-[11px] text-[var(--color-ink-dim)] transition-colors hover:border-[var(--color-line-hi)] hover:text-[var(--color-ink)] sm:flex"
-				>
-					<svg class="size-4"><use href="#i-world"></use></svg>
-					<span>openrouter</span>
-				</a>
 				<button
 					id="history-btn"
+					aria-label="Open battle history"
 					class="relative flex items-center gap-1.5 rounded-md border border-[var(--color-line)] px-2.5 py-2 text-[11px] text-[var(--color-ink-dim)] transition-colors hover:border-[var(--color-line-hi)] hover:text-[var(--color-ink)]"
 					title="Battle history  ·  shortcut: H"
 				>
@@ -42,8 +54,9 @@ import Layout from "../layouts/Layout.astro";
 				</button>
 				<button
 					id="key-btn"
+					aria-label="Configure API keys"
 					class="group relative flex items-center gap-1.5 rounded-md border border-[var(--color-line)] px-2.5 py-2 text-[11px] text-[var(--color-ink-dim)] transition-colors hover:border-[var(--color-line-hi)] hover:text-[var(--color-ink)]"
-					title="OpenRouter API key  ·  shortcut: K"
+					title="Configure provider API keys  ·  shortcut: K"
 				>
 					<svg class="size-4"><use href="#i-key"></use></svg>
 					<span id="key-label">API keys</span>
@@ -67,6 +80,8 @@ import Layout from "../layouts/Layout.astro";
 					<div class="relative" id="add-model-wrap">
 						<button
 							id="add-model-btn"
+							aria-expanded="false"
+							aria-controls="model-dropdown"
 							class="flex items-center gap-1.5 rounded-lg border border-dashed border-[var(--color-line-hi)] px-2.5 py-1.5 text-[12px] text-[var(--color-ink-dim)] transition-colors hover:border-[var(--color-accent)] hover:text-[var(--color-ink)]"
 							title="add model  ·  shortcut: M"
 						>
@@ -80,11 +95,22 @@ import Layout from "../layouts/Layout.astro";
 							id="model-dropdown"
 							class="absolute left-0 top-full z-30 mt-2 hidden w-[min(92vw,420px)] overflow-hidden rounded-xl border border-[var(--color-line-hi)] bg-[var(--color-panel)] shadow-2xl"
 						>
-								<div class="flex gap-1 border-b border-[var(--color-line)] p-1.5">
-									<button data-provtab="openrouter" class="flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-[11px] transition-colors"><span class="size-1.5 rounded-full" style="background:#d8ff3e"></span>OpenRouter</button>
-									<button data-provtab="openai" class="flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-[11px] transition-colors"><span class="size-1.5 rounded-full" style="background:#10a37f"></span>OpenAI</button>
-									<button data-provtab="anthropic" class="flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-[11px] transition-colors"><span class="size-1.5 rounded-full" style="background:#d97757"></span>Anthropic</button>
-									<button data-provtab="local" class="flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-[11px] transition-colors"><span class="size-1.5 rounded-full" style="background:#8b93a7"></span>Local</button>
+								<div class="no-scrollbar flex gap-1 overflow-x-auto border-b border-[var(--color-line)] p-1.5" role="tablist" aria-label="Model provider">
+									<button type="button" role="tab" aria-selected="true" data-provtab="all" class="flex shrink-0 items-center justify-center gap-1.5 rounded-md px-2.5 py-1.5 text-[11px] transition-colors">
+										<svg class="size-4"><use href="#i-world"></use></svg>
+										All
+									</button>
+									{PROVIDER_LIST.map((provider) => (
+										<button type="button" role="tab" aria-selected="false" data-provtab={provider.id} class="flex shrink-0 items-center justify-center gap-1.5 rounded-md px-2.5 py-1.5 text-[11px] transition-colors">
+											<img
+												src={provider.logo}
+												alt=""
+												class:list={["size-4 object-contain", { "brightness-0 invert": provider.logoMonochrome }]}
+											/>
+											{provider.short}
+											<span data-provider-ready={provider.id} class="hidden size-1 rounded-full bg-emerald-400" title="configured"></span>
+										</button>
+									))}
 								</div>
 							<div class="flex items-center gap-2 border-b border-[var(--color-line)] px-3 py-2.5">
 								<svg class="size-4 text-[var(--color-ink-faint)]"><use href="#i-search"></use></svg>
@@ -97,7 +123,7 @@ import Layout from "../layouts/Layout.astro";
 									class="w-full bg-transparent text-[12px] text-[var(--color-ink)] outline-none placeholder:text-[var(--color-ink-faint)]"
 								/>
 							</div>
-							<ul id="model-list" class="no-scrollbar max-h-[320px] overflow-y-auto py-1 text-[12px]">
+							<ul id="model-list" role="listbox" class="no-scrollbar max-h-[320px] overflow-y-auto py-1 text-[12px]">
 								<li class="px-3 py-6 text-center text-[var(--color-ink-faint)]">loading models…</li>
 							</ul>
 						</div>
@@ -135,13 +161,28 @@ import Layout from "../layouts/Layout.astro";
 
 			<!-- Prompt + run -->
 			<div class="p-4">
-				<textarea
-					id="prompt"
-					rows="3"
-					placeholder="Describe what every model should build…  e.g. “a responsive pricing table with a monthly/yearly toggle”"
-					spellcheck="false"
-					class="no-scrollbar w-full resize-y rounded-lg border border-[var(--color-line)] bg-[var(--color-surface)] p-3.5 text-[14px] leading-relaxed text-[var(--color-ink)] outline-none transition-colors placeholder:text-[var(--color-ink-faint)] focus:border-[var(--color-line-hi)]"
-				></textarea>
+				<div class="rounded-lg border border-[var(--color-line)] bg-[var(--color-surface)] transition-colors focus-within:border-[var(--color-line-hi)]">
+					<textarea
+						id="prompt"
+						rows="3"
+						placeholder="Describe what every model should build…  e.g. “a responsive pricing table with a monthly/yearly toggle”"
+						spellcheck="false"
+						class="no-scrollbar block w-full resize-y bg-transparent px-3.5 pb-2 pt-3.5 text-[14px] leading-relaxed text-[var(--color-ink)] outline-none placeholder:text-[var(--color-ink-faint)]"
+					></textarea>
+					<div id="prompt-examples" class="no-scrollbar flex items-center gap-2 overflow-x-auto px-3 pb-2.5 pt-1" aria-label="Example prompts">
+						<span class="shrink-0 text-[10px] uppercase tracking-[0.16em] text-[var(--color-ink-faint)]">Try</span>
+						{PROMPT_EXAMPLES.map((example) => (
+							<button
+								type="button"
+								data-prompt-example={example.prompt}
+								aria-controls="prompt"
+								class="shrink-0 rounded-full border border-[var(--color-line)] bg-[var(--color-panel-hi)] px-2.5 py-1 text-[11px] text-[var(--color-ink-dim)] transition-colors hover:border-[var(--color-accent)]/50 hover:text-[var(--color-ink)]"
+							>
+								{example.label}
+							</button>
+						))}
+					</div>
+				</div>
 
 				<div class="mt-3 flex flex-wrap items-center justify-between gap-3">
 				  <div class="flex flex-wrap items-center gap-2">
@@ -152,17 +193,17 @@ import Layout from "../layouts/Layout.astro";
 						role="tablist"
 						aria-label="View mode"
 					>
-						<button data-mode="output" class="view-tab flex items-center gap-1.5 rounded-md py-1.5 pl-3 pr-2 text-[12px] text-[var(--color-ink-dim)] transition-colors" title="Output — the AI's answer  ·  shortcut: O">
+						<button role="tab" aria-controls="results" data-mode="output" class="view-tab flex items-center gap-1.5 rounded-md py-1.5 pl-3 pr-2 text-[12px] text-[var(--color-ink-dim)] transition-colors" title="Output — the AI's answer  ·  shortcut: O">
 							<svg class="size-4"><use href="#i-text"></use></svg>
 							<span class="hidden sm:inline">Output</span>
 							<kbd class="hidden h-[1.05rem] min-w-[1.05rem] items-center justify-center rounded-[4px] border border-b-2 border-[var(--color-line-hi)] bg-[var(--color-surface)] px-1 font-mono text-[9px] leading-none text-[var(--color-ink-faint)] sm:inline-flex">O</kbd>
 						</button>
-						<button data-mode="code" class="view-tab flex items-center gap-1.5 rounded-md py-1.5 pl-3 pr-2 text-[12px] text-[var(--color-ink-dim)] transition-colors" title="Code — the generated source  ·  shortcut: C">
+						<button role="tab" aria-controls="results" data-mode="code" class="view-tab flex items-center gap-1.5 rounded-md py-1.5 pl-3 pr-2 text-[12px] text-[var(--color-ink-dim)] transition-colors" title="Code — the generated source  ·  shortcut: C">
 							<svg class="size-4"><use href="#i-code"></use></svg>
 							<span class="hidden sm:inline">Code</span>
 							<kbd class="hidden h-[1.05rem] min-w-[1.05rem] items-center justify-center rounded-[4px] border border-b-2 border-[var(--color-line-hi)] bg-[var(--color-surface)] px-1 font-mono text-[9px] leading-none text-[var(--color-ink-faint)] sm:inline-flex">C</kbd>
 						</button>
-						<button data-mode="preview" class="view-tab flex items-center gap-1.5 rounded-md py-1.5 pl-3 pr-2 text-[12px] text-[var(--color-ink-dim)] transition-colors" title="Preview — live render  ·  shortcut: P">
+						<button role="tab" aria-controls="results" data-mode="preview" class="view-tab flex items-center gap-1.5 rounded-md py-1.5 pl-3 pr-2 text-[12px] text-[var(--color-ink-dim)] transition-colors" title="Preview — live render  ·  shortcut: P">
 							<svg class="size-4"><use href="#i-browser"></use></svg>
 							<span class="hidden sm:inline">Preview</span>
 							<kbd class="hidden h-[1.05rem] min-w-[1.05rem] items-center justify-center rounded-[4px] border border-b-2 border-[var(--color-line-hi)] bg-[var(--color-surface)] px-1 font-mono text-[9px] leading-none text-[var(--color-ink-faint)] sm:inline-flex">P</kbd>
@@ -178,13 +219,39 @@ import Layout from "../layouts/Layout.astro";
 					>
 						<svg class="size-4"><use href="#i-link"></use></svg>
 						<span class="hidden sm:inline">Scroll link</span>
+						<span id="scroll-link-check" class="grid size-4 place-items-center rounded border border-[var(--color-line-hi)] text-transparent" aria-hidden="true">
+							<svg class="size-3"><use href="#i-check"></use></svg>
+						</span>
 						<kbd class="hidden h-[1.05rem] min-w-[1.05rem] items-center justify-center rounded-[4px] border border-b-2 border-[var(--color-line-hi)] bg-[var(--color-surface)] px-1 font-mono text-[9px] leading-none text-[var(--color-ink-faint)] sm:inline-flex">L</kbd>
+					</button>
+					<button
+						id="blind-mode-btn"
+						class="flex items-center gap-1.5 rounded-lg border border-[var(--color-line)] bg-[var(--color-surface)] px-2.5 py-1.5 text-[12px] text-[var(--color-ink-dim)] transition-colors hover:text-[var(--color-ink)] disabled:cursor-not-allowed disabled:opacity-40"
+						title="Blind mode — randomize cards and hide model identities  ·  shortcut: B"
+						aria-pressed="false"
+					>
+						<svg class="size-4"><use href="#i-eye"></use></svg>
+						<span class="hidden sm:inline">Blind mode</span>
+						<span id="blind-mode-check" class="grid size-4 place-items-center rounded border border-[var(--color-line-hi)] text-transparent" aria-hidden="true">
+							<svg class="size-3"><use href="#i-check"></use></svg>
+						</span>
+						<kbd class="hidden h-[1.05rem] min-w-[1.05rem] items-center justify-center rounded-[4px] border border-b-2 border-[var(--color-line-hi)] bg-[var(--color-surface)] px-1 font-mono text-[9px] leading-none text-[var(--color-ink-faint)] sm:inline-flex">B</kbd>
+					</button>
+					<button
+						id="reveal-models-btn"
+						class="hidden items-center gap-1.5 rounded-lg border border-[var(--color-accent)]/40 bg-[var(--color-accent)]/10 px-2.5 py-1.5 text-[12px] text-[var(--color-accent)] transition-colors hover:bg-[var(--color-accent)]/15"
+						title="Reveal model identities"
+					>
+						<svg class="size-4"><use href="#i-eye"></use></svg>
+						<span>Reveal models</span>
 					</button>
 				  </div>
 
 					<div class="flex items-center gap-2">
+						<span id="battle-status" class="hidden text-[11px] tabular-nums text-[var(--color-ink-faint)]" role="status" aria-live="polite"></span>
 						<button
 							id="rerun-all-btn"
+							aria-label="Re-run every model"
 							class="hidden size-10 place-items-center rounded-lg border border-[var(--color-line)] bg-[var(--color-surface)] text-[var(--color-ink-dim)] transition-colors hover:border-[var(--color-line-hi)] hover:text-[var(--color-ink)] disabled:cursor-not-allowed disabled:opacity-40 [&:not(.hidden)]:grid"
 							title="Re-run every model from scratch (ignores cached results)"
 						>
@@ -204,7 +271,7 @@ import Layout from "../layouts/Layout.astro";
 		</section>
 
 		<!-- =============================== RESULTS =============================== -->
-		<section id="results" class="grid flex-1 content-start gap-4 py-6 grid-cols-[repeat(auto-fill,minmax(22rem,1fr))]">
+		<section id="results" role="tabpanel" class="grid flex-1 content-start gap-4 py-6 grid-cols-[repeat(auto-fill,minmax(min(22rem,100%),1fr))]">
 			<!-- empty state -->
 			<div id="empty-state" class="col-span-full grid place-items-center py-24 text-center">
 				<div class="flex flex-col items-center gap-4">
@@ -221,20 +288,66 @@ import Layout from "../layouts/Layout.astro";
 				</div>
 			</div>
 		</section>
+		<section id="battle-summary" class="mb-6 hidden overflow-hidden rounded-xl border border-[var(--color-line)] bg-[var(--color-panel)]/70">
+			<header class="flex flex-wrap items-center gap-3 border-b border-[var(--color-line)] px-4 py-3">
+				<svg class="size-4 text-[var(--color-accent)]"><use href="#i-trophy"></use></svg>
+				<h2 class="text-[11px] uppercase tracking-[0.18em] text-[var(--color-ink-dim)]">Battle summary</h2>
+			</header>
+			<div class="grid border-b border-[var(--color-line)] lg:grid-cols-[minmax(0,2fr)_minmax(16rem,1fr)]">
+				<div id="battle-timeline" class="min-w-0 border-b border-[var(--color-line)] lg:border-b-0 lg:border-r"></div>
+				<aside id="battle-insights"></aside>
+			</div>
+			<div id="battle-summary-list" class="overflow-x-auto"></div>
+		</section>
+		<section id="share-panel" class="mb-6 hidden rounded-xl border border-[var(--color-accent)]/25 bg-[var(--color-accent)]/[0.04] p-4" aria-labelledby="share-title">
+			<div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+				<div class="flex max-w-3xl items-start gap-3">
+					<span class="grid size-9 shrink-0 place-items-center rounded-lg bg-[var(--color-accent)]/10 text-[var(--color-accent)]">
+						<svg class="size-4"><use href="#i-world"></use></svg>
+					</span>
+					<div>
+						<h2 id="share-title" class="text-[13px] text-[var(--color-ink)]">Publish these results on the web</h2>
+						<p class="mt-1 text-[11px] leading-relaxed text-[var(--color-ink-faint)]">
+							Only the prompt, successful responses, metrics and chart data will be uploaded.
+							Your API keys, system prompt and model reasoning are never sent.
+						</p>
+						<p id="share-status" class="mt-2 hidden text-[11px]" role="status" aria-live="polite"></p>
+					</div>
+				</div>
+				<button
+					id="share-battle-btn"
+					type="button"
+					class="flex shrink-0 items-center justify-center gap-2 rounded-lg bg-[var(--color-accent)] px-4 py-2.5 text-[12px] font-medium text-black transition-opacity hover:opacity-90 disabled:cursor-wait disabled:opacity-50"
+				>
+					<svg class="size-4"><use href="#i-world"></use></svg>
+					<span>Publish results</span>
+				</button>
+			</div>
+		</section>
 
-		<footer class="flex items-center justify-between gap-2 border-t border-[var(--color-line)] py-4 text-[10px] uppercase tracking-[0.2em] text-[var(--color-ink-faint)]">
+		<footer class="flex flex-col items-start gap-3 border-t border-[var(--color-line)] py-4 text-[10px] uppercase tracking-[0.2em] text-[var(--color-ink-faint)] sm:flex-row sm:items-center sm:justify-between">
 			<span class="flex items-center gap-1.5">
 				<span>developed with</span>
 				<svg class="size-3.5 text-[var(--color-accent)]"><use href="#i-heart"></use></svg>
 				<span>by</span>
 				<a href="https://midu.dev" target="_blank" rel="noopener" class="text-[var(--color-ink-dim)] underline-offset-2 transition-colors hover:text-[var(--color-ink)] hover:underline">midudev</a>
 			</span>
-			<span class="hidden sm:inline">keys & prompts stay in your browser</span>
+			<div class="flex flex-wrap items-center gap-x-4 gap-y-2 sm:justify-end">
+				<a
+					href="https://github.com/sponsors/midudev"
+					target="_blank"
+					rel="noopener"
+					class="text-[var(--color-accent)] underline-offset-2 transition-opacity hover:underline hover:opacity-80"
+				>
+					Keep AI Battle free — support the project
+				</a>
+				<span class="hidden border-l border-[var(--color-line-hi)] pl-4 lg:inline">keys & prompts stay in your browser</span>
+			</div>
 		</footer>
 	</div>
 
 	<!-- ============================== API KEY MODAL ============================== -->
-	<div id="key-modal" class="fixed inset-0 z-50 hidden">
+	<div id="key-modal" class="fixed inset-0 z-50 hidden" role="dialog" aria-modal="true" aria-labelledby="key-modal-title">
 		<div id="key-backdrop" class="absolute inset-0 bg-black/70 backdrop-blur-sm"></div>
 		<div class="absolute left-1/2 top-1/2 w-[min(92vw,440px)] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-[var(--color-line-hi)] bg-[var(--color-panel)] p-5 shadow-2xl">
 			<div class="flex items-center gap-2.5">
@@ -242,48 +355,49 @@ import Layout from "../layouts/Layout.astro";
 					<svg class="size-4"><use href="#i-key"></use></svg>
 				</span>
 				<div>
-					<h2 class="text-[13px] text-[var(--color-ink)]">API keys</h2>
+					<h2 id="key-modal-title" class="text-[13px] text-[var(--color-ink)]">API keys</h2>
 					<p class="text-[11px] text-[var(--color-ink-faint)]">stored locally — never leave your browser. Add the ones you'll use.</p>
 				</div>
 			</div>
-			<div class="mt-4 space-y-3">
-				<div>
-					<div class="mb-1 flex items-center justify-between">
-						<span class="flex items-center gap-1.5 text-[11px] text-[var(--color-ink-dim)]"><span class="size-1.5 rounded-full" style="background:#d8ff3e"></span>OpenRouter</span>
-						<a href="https://openrouter.ai/keys" target="_blank" rel="noopener" class="text-[10px] text-[var(--color-ink-faint)] underline-offset-2 hover:text-[var(--color-ink-dim)] hover:underline">get a key →</a>
+			<p id="key-modal-message" class="mt-4 hidden rounded-lg border border-[var(--color-accent)]/30 bg-[var(--color-accent)]/10 px-3 py-2 text-[12px] text-[var(--color-accent)]" role="status"></p>
+			<div class="no-scrollbar mt-4 max-h-[min(60vh,560px)] space-y-3 overflow-y-auto pr-1">
+				{PROVIDER_LIST.map((provider) => (
+					<div data-key-provider={provider.id}>
+						<div class="mb-1 flex items-center justify-between gap-3">
+							<span class="flex items-center gap-1.5 text-[11px] text-[var(--color-ink-dim)]">
+								<img
+									src={provider.logo}
+									alt=""
+									class:list={["size-4 object-contain", { "brightness-0 invert": provider.logoMonochrome }]}
+								/>
+								{provider.name}
+							</span>
+							{provider.keyUrl ? (
+								<a href={provider.keyUrl} target="_blank" rel="noopener" class="text-[10px] text-[var(--color-ink-faint)] underline-offset-2 hover:text-[var(--color-ink-dim)] hover:underline">get a key →</a>
+							) : (
+								<span class="text-[10px] text-[var(--color-ink-faint)]">{provider.credentialHelp}</span>
+							)}
+						</div>
+						<div class="flex items-center gap-2 rounded-lg border border-[var(--color-line)] bg-[var(--color-surface)] px-3 py-2 focus-within:border-[var(--color-line-hi)]">
+							<input
+								id={`api-key-${provider.id}`}
+								type={provider.id === "local" ? "text" : "password"}
+								inputmode={provider.id === "local" ? "url" : "text"}
+								placeholder={provider.keyPlaceholder}
+								aria-label={`${provider.name} ${provider.credentialLabel}`}
+								autocomplete="off"
+								spellcheck="false"
+								class:list={["w-full bg-transparent font-mono text-[13px] text-[var(--color-ink)] outline-none placeholder:text-[var(--color-ink-faint)]"]}
+							/>
+						</div>
+						{provider.credentialHelp && provider.id !== "local" && (
+							<p class="mt-1 text-[10px] leading-relaxed text-[var(--color-ink-faint)]">{provider.credentialHelp}</p>
+						)}
+						{provider.id === "local" && (
+							<p class="mt-1 text-[10px] leading-relaxed text-[var(--color-ink-faint)]">Make sure your local server has CORS enabled.</p>
+						)}
 					</div>
-					<div class="flex items-center gap-2 rounded-lg border border-[var(--color-line)] bg-[var(--color-surface)] px-3 py-2 focus-within:border-[var(--color-line-hi)]">
-						<input id="api-key-openrouter" type="password" placeholder="sk-or-v1-…" autocomplete="off" spellcheck="false" class="w-full bg-transparent text-[13px] text-[var(--color-ink)] outline-none placeholder:text-[var(--color-ink-faint)]" />
-					</div>
-				</div>
-				<div>
-					<div class="mb-1 flex items-center justify-between">
-						<span class="flex items-center gap-1.5 text-[11px] text-[var(--color-ink-dim)]"><span class="size-1.5 rounded-full" style="background:#10a37f"></span>OpenAI</span>
-						<a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener" class="text-[10px] text-[var(--color-ink-faint)] underline-offset-2 hover:text-[var(--color-ink-dim)] hover:underline">get a key →</a>
-					</div>
-					<div class="flex items-center gap-2 rounded-lg border border-[var(--color-line)] bg-[var(--color-surface)] px-3 py-2 focus-within:border-[var(--color-line-hi)]">
-						<input id="api-key-openai" type="password" placeholder="sk-…" autocomplete="off" spellcheck="false" class="w-full bg-transparent text-[13px] text-[var(--color-ink)] outline-none placeholder:text-[var(--color-ink-faint)]" />
-					</div>
-				</div>
-				<div>
-					<div class="mb-1 flex items-center justify-between">
-						<span class="flex items-center gap-1.5 text-[11px] text-[var(--color-ink-dim)]"><span class="size-1.5 rounded-full" style="background:#d97757"></span>Anthropic</span>
-						<a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener" class="text-[10px] text-[var(--color-ink-faint)] underline-offset-2 hover:text-[var(--color-ink-dim)] hover:underline">get a key →</a>
-					</div>
-					<div class="flex items-center gap-2 rounded-lg border border-[var(--color-line)] bg-[var(--color-surface)] px-3 py-2 focus-within:border-[var(--color-line-hi)]">
-						<input id="api-key-anthropic" type="password" placeholder="sk-ant-…" autocomplete="off" spellcheck="false" class="w-full bg-transparent text-[13px] text-[var(--color-ink)] outline-none placeholder:text-[var(--color-ink-faint)]" />
-					</div>
-				</div>
-				<div>
-					<div class="mb-1 flex items-center justify-between">
-						<span class="flex items-center gap-1.5 text-[11px] text-[var(--color-ink-dim)]"><span class="size-1.5 rounded-full" style="background:#8b93a7"></span>Local API</span>
-						<span class="text-[10px] text-[var(--color-ink-faint)]">Ollama · LM Studio · llama.cpp…</span>
-					</div>
-					<div class="flex items-center gap-2 rounded-lg border border-[var(--color-line)] bg-[var(--color-surface)] px-3 py-2 focus-within:border-[var(--color-line-hi)]">
-						<input id="api-key-local" type="text" inputmode="url" placeholder="http://localhost:11434/v1" autocomplete="off" spellcheck="false" class="w-full bg-transparent font-mono text-[13px] text-[var(--color-ink)] outline-none placeholder:text-[var(--color-ink-faint)]" />
-					</div>
-					<p class="mt-1 text-[10px] leading-relaxed text-[var(--color-ink-faint)]">OpenAI-compatible base URL — its models are listed automatically.</p>
-				</div>
+				))}
 			</div>
 			<div class="mt-4 flex items-center justify-end gap-2">
 				<button id="key-cancel" class="rounded-lg border border-[var(--color-line)] px-3.5 py-2 text-[12px] text-[var(--color-ink-dim)] transition-colors hover:text-[var(--color-ink)]">
@@ -298,7 +412,7 @@ import Layout from "../layouts/Layout.astro";
 	</div>
 
 	<!-- ============================== HISTORY DRAWER ============================== -->
-	<div id="history-drawer" class="fixed inset-0 z-50 hidden">
+	<div id="history-drawer" class="fixed inset-0 z-50 hidden" role="dialog" aria-modal="true" aria-labelledby="history-title">
 		<div id="history-backdrop" class="absolute inset-0 bg-black/70 backdrop-blur-sm"></div>
 		<aside
 			id="history-panel"
@@ -309,14 +423,14 @@ import Layout from "../layouts/Layout.astro";
 					<svg class="size-4"><use href="#i-history"></use></svg>
 				</span>
 				<div class="flex-1">
-					<h2 class="text-[13px] text-[var(--color-ink)]">Battle history</h2>
+					<h2 id="history-title" class="text-[13px] text-[var(--color-ink)]">Battle history</h2>
 					<p class="text-[11px] text-[var(--color-ink-faint)]">stored locally in this browser</p>
 				</div>
-				<button id="history-clear" class="hidden items-center gap-1.5 rounded-md border border-[var(--color-line)] px-2 py-1.5 text-[11px] text-[var(--color-ink-faint)] transition-colors hover:border-red-500/40 hover:text-red-400">
+				<button id="history-clear" aria-label="Clear battle history" class="hidden items-center gap-1.5 rounded-md border border-[var(--color-line)] px-2 py-1.5 text-[11px] text-[var(--color-ink-faint)] transition-colors hover:border-red-500/40 hover:text-red-400">
 					<svg class="size-3.5"><use href="#i-trash"></use></svg>
 					<span>clear</span>
 				</button>
-				<button id="history-close" class="grid size-8 place-items-center rounded-md text-[var(--color-ink-faint)] transition-colors hover:bg-[var(--color-line)] hover:text-[var(--color-ink)]">
+				<button id="history-close" aria-label="Close battle history" class="grid size-8 place-items-center rounded-md text-[var(--color-ink-faint)] transition-colors hover:bg-[var(--color-line)] hover:text-[var(--color-ink)]">
 					<svg class="size-4"><use href="#i-x"></use></svg>
 				</button>
 			</header>

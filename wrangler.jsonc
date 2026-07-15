@@ -1,0 +1,13 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "ai-battle",
+  "compatibility_date": "2026-07-14",
+  "d1_databases": [
+    {
+      "binding": "BATTLES_DB",
+      "database_name": "ai-battle-results",
+      "database_id": "10f8e078-f740-4607-8043-aac144524e0f",
+      "migrations_dir": "migrations"
+    }
+  ]
+}

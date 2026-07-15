@@ -1,6 +1,8 @@
 ---
 import "../styles/global.css";
 import IconSprite from "../components/IconSprite.astro";
+
+const canonicalUrl = new URL(Astro.url.pathname, Astro.site);
 ---
 
 <!doctype html>
@@ -9,15 +11,32 @@ import IconSprite from "../components/IconSprite.astro";
 		<meta charset="UTF-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+		<link rel="canonical" href={canonicalUrl} />
 		<meta name="generator" content={Astro.generator} />
 		<meta
 			name="description"
-			content="Run one prompt across multiple AI models and compare output, tokens, latency and cost — side by side."
+			content="Compare AI models side by side using the same prompt. Evaluate outputs, generated code, live previews, speed, tokens and cost."
 		/>
-		<title>AI BATTLE — model arena</title>
+		<meta name="robots" content="index, follow" />
+		<meta property="og:type" content="website" />
+		<meta property="og:site_name" content="letscompare.ai" />
+		<meta property="og:url" content={canonicalUrl} />
+		<meta property="og:title" content="Compare AI Models Side by Side" />
+		<meta property="og:description" content="Run the same prompt across multiple AI models and compare output quality, code, speed, tokens and cost." />
+		<meta property="og:image" content="/favicon.svg" />
+		<meta name="twitter:card" content="summary" />
+		<meta name="twitter:title" content="Compare AI Models Side by Side" />
+		<meta name="twitter:description" content="Compare AI model outputs, generated code, live previews, speed, tokens and cost." />
+		<title>Compare AI Models Side by Side — letscompare.ai</title>
 	</head>
 	<body class="grid-bg">
 		<IconSprite />
 		<slot />
 	</body>
 </html>
+
+<script>
+	import { initSounds } from "../scripts/sounds";
+
+	initSounds();
+</script>

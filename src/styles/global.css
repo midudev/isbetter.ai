@@ -30,7 +30,7 @@
 
   --color-ink: #ededed;
   --color-ink-dim: #a1a1a1;
-  --color-ink-faint: #6e6e6e;
+  --color-ink-faint: #858585;
   --color-surface: #0a0a0a;
   --color-panel: #0f0f0f;
   --color-panel-hi: #161616;
@@ -56,6 +56,11 @@
   ::selection {
     background: var(--color-accent);
     color: #000;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
   }
 
   /* Tabler icon defaults. Presentation attrs on a <g> inside <defs> do NOT
@@ -212,4 +217,15 @@
     transparent 0
   );
   background-size: 22px 22px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
