@@ -2,6 +2,17 @@
   "name": "ai-battle",
   "type": "module",
   "version": "0.0.1",
+  "description": "Compare AI models side by side — same prompt, streamed answers, live code previews, speed, tokens and cost.",
+  "homepage": "https://isbetter.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/midudev/ai-battle.git"
+  },
+  "bugs": {
+    "url": "https://github.com/midudev/ai-battle/issues"
+  },
+  "author": "midudev (https://midu.dev)",
+  "packageManager": "pnpm@11.5.0",
   "engines": {
     "node": ">=22.12.0"
   },
