@@ -102,9 +102,10 @@ interface Entry {
   totalTokens: number;
   cost: number;
   durationMs: number; // total time: request → finish
-  genMs: number; // generation time: first token → finish
+  genMs: number; // generation time: first token → last token
   ttftMs: number; // request → first token
   firstTokenAt?: number; // performance.now() when the first token arrived
+  lastTokenAt?: number; // performance.now() when the last token arrived
   usageEstimated: boolean;
   costKnown: boolean;
   metrics: MetricSample[];
@@ -1193,6 +1194,7 @@ async function callModel(entry: Entry) {
   entry.reasoning = "";
   entry.code = entry.codeHtml = entry.error = entry.warning = "";
   entry.firstTokenAt = undefined;
+  entry.lastTokenAt = undefined;
   entry.promptTokens = 0;
   entry.completionTokens = 0;
   entry.totalTokens = 0;
@@ -1282,10 +1284,12 @@ async function callModel(entry: Entry) {
         const parsed = prov.parse(json);
         if (parsed.finishReason) finishReason = parsed.finishReason;
         if (parsed.reasoning || parsed.content) {
+          const tokenAt = performance.now();
           if (entry.firstTokenAt == null) {
-            entry.firstTokenAt = performance.now();
+            entry.firstTokenAt = tokenAt;
             entry.ttftMs = entry.firstTokenAt - entry.startedAt;
           }
+          entry.lastTokenAt = tokenAt;
           entry.reasoning += parsed.reasoning;
           entry.raw += parsed.content;
         }
@@ -1309,7 +1313,10 @@ async function callModel(entry: Entry) {
 
     const end = performance.now();
     entry.durationMs = end - entry.startedAt;
-    entry.genMs = entry.firstTokenAt != null ? end - entry.firstTokenAt : entry.durationMs;
+    entry.genMs =
+      entry.firstTokenAt != null
+        ? (entry.lastTokenAt ?? end) - entry.firstTokenAt
+        : entry.durationMs;
     entry.ttftMs =
       entry.firstTokenAt != null ? entry.firstTokenAt - entry.startedAt : entry.durationMs;
     if (streamError && !entry.raw) throw new Error(streamError);
@@ -1347,7 +1354,10 @@ async function callModel(entry: Entry) {
     }
   } catch (err: unknown) {
     entry.durationMs = performance.now() - entry.startedAt;
-    entry.genMs = entry.firstTokenAt != null ? performance.now() - entry.firstTokenAt : entry.durationMs;
+    entry.genMs =
+      entry.firstTokenAt != null
+        ? (entry.lastTokenAt ?? performance.now()) - entry.firstTokenAt
+        : entry.durationMs;
     entry.ttftMs =
       entry.firstTokenAt != null ? entry.firstTokenAt - entry.startedAt : entry.durationMs;
     entry.state = "error";

@@ -199,11 +199,13 @@ export function statsRowHTML(
   opts: { best?: Record<string, boolean>; live?: boolean } = {},
 ) {
   const best = opts.best || {};
-  // Generation time = from the first token to the end (excludes the startup
-  // latency before the first token). Throughput is measured over it.
+  // Generation time = first received token to last received token. This
+  // excludes both startup latency and any delay closing the API stream.
   const gen = r.genMs != null ? r.genMs : r.durationMs;
   const tput = gen > 0 ? r.completionTokens / (gen / 1000) : 0;
-  const genLabel = opts.live ? "time generating (from first token)" : "generation time — from the first token";
+  const genLabel = opts.live
+    ? "time generating (from first token)"
+    : "generation time — first token to last token";
   const genValue = opts.live && gen <= 0 ? "—" : fmtDur(gen);
   const estimated = r.usageEstimated || opts.live;
   const suffix = estimated ? " est." : "";
@@ -214,7 +216,7 @@ export function statsRowHTML(
       ${statPill("i-clock-bolt", genValue, genLabel, best.gen)}
       ${statPill("i-down", r.promptTokens ? `${fmtInt(r.promptTokens)}${suffix}` : "·", estimated ? "input tokens (estimate)" : "input tokens")}
       ${statPill("i-up", `${fmtInt(r.completionTokens)}${suffix}`, estimated ? "output tokens (estimate)" : "output tokens")}
-      ${statPill("i-gauge", `${fmtRate(tput)} t/s`, "throughput — tokens/sec while generating", best.tput)}
+      ${statPill("i-gauge", `${fmtRate(tput)} t/s`, "throughput — output tokens/sec from first token to last token", best.tput)}
       ${statPill("i-coin", `${fmtCost(r.cost, r.costKnown !== false)}${estimated && r.costKnown !== false ? " est." : ""}`, r.costKnown === false ? "price unknown" : estimated ? "cost (estimate)" : "cost", best.cheap)}
     </div>`;
 }
@@ -799,7 +801,7 @@ export interface HistoryResult {
   usageEstimated?: boolean;
   durationMs: number;
   ttftMs?: number;
-  genMs?: number; // generation time (first token → end); absent on old records
+  genMs?: number; // generation time (first token → last token); absent on old records
   reasoning?: string; // the model's chain-of-thought, if any
   metrics?: MetricSample[];
 }
