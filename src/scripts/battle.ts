@@ -20,6 +20,8 @@ import {
   renderBattleInsights,
   installMetricTooltips,
   installTimelineTracking,
+  installPreviewFade,
+  restartPreview,
   SCROLLLINK_KEY,
   type ViewMode,
   type Battle,
@@ -32,6 +34,7 @@ const VIEW_KEY = "ab:view";
 
 installMetricTooltips();
 installTimelineTracking();
+installPreviewFade();
 
 // Fetch the formatter/highlighter chunk in parallel with the battle itself.
 const codeRender = import("./code-render");
@@ -322,7 +325,7 @@ async function initBattle(b: Battle) {
       const f = btn
         .closest("article")
         ?.querySelector("iframe[data-preview]") as HTMLIFrameElement | null;
-      if (f) f.srcdoc = f.srcdoc;
+      if (f) restartPreview(f);
     } else if (btn.dataset.action === "open" && v.code) {
       openHardenedPreview(v.code, `Preview · ${displayLabel(v)}`);
     }

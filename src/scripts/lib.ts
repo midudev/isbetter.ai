@@ -268,6 +268,7 @@ export const PREVIEW_CSP = [
 
 /** Tightest sandbox that still allows interactive demos. No same-origin, popups, forms, or modals. */
 export const PREVIEW_SANDBOX = "allow-scripts";
+const PREVIEW_FALLBACK_BACKGROUND = "#080a08";
 
 /** Deny browser/device capabilities that interactive demos do not need. */
 export const PREVIEW_ALLOW = [
@@ -297,12 +298,13 @@ function scrollBridge(id: string): string {
 
 // Stops ordinary links and submissions from replacing the preview with a
 // phishing page. The sandbox remains the primary boundary for scripted escape.
-const PREVIEW_NAVIGATION_GUARD = `<script>(function(){function blockedLink(target){var link=target&&target.closest&&target.closest("a[href]");if(!link)return false;link.removeAttribute("ping");var href=(link.getAttribute("href")||"").trim();return href!==""&&href.charAt(0)!=="#"}addEventListener("click",function(event){if(blockedLink(event.target))event.preventDefault()},true);addEventListener("auxclick",function(event){if(blockedLink(event.target))event.preventDefault()},true);addEventListener("submit",function(event){event.preventDefault()},true)})()</scr`+`ipt>`;
+const PREVIEW_NAVIGATION_GUARD = `<script>(function(){var XLINK="http://www.w3.org/1999/xlink";function blockedLink(target){var link=target&&target.closest&&target.closest("a,area");if(!link)return false;link.removeAttribute("ping");var href=(link.getAttribute("href")||link.getAttributeNS(XLINK,"href")||"").trim();if(href!==""&&href.charAt(0)!=="#")return true;return false}addEventListener("click",function(event){if(blockedLink(event.target))event.preventDefault()},true);addEventListener("auxclick",function(event){if(blockedLink(event.target))event.preventDefault()},true);addEventListener("submit",function(event){event.preventDefault()},true)})()</scr`+`ipt>`;
 
 /** Strip navigation gadgets that can leave the srcdoc document before CSP helps. */
 function stripPreviewNavigationGadgets(code: string): string {
   return code
     .replace(/<base\b[^>]*>/gi, "")
+    .replace(/<area\b[^>]*>/gi, "")
     .replace(/<meta\b[^>]*http-equiv\s*=\s*(["']?)refresh\1[^>]*>/gi, "")
     .replace(
       /<link\b(?=[^>]*\brel\s*=\s*(?:"[^"]*\b(?:preconnect|dns-prefetch|prefetch|prerender|modulepreload)\b[^"]*"|'[^']*\b(?:preconnect|dns-prefetch|prefetch|prerender|modulepreload)\b[^']*'|[^\s>]*(?:preconnect|dns-prefetch|prefetch|prerender|modulepreload)[^\s>]*))[^>]*>/gi,
@@ -320,7 +322,8 @@ export function hardenPreviewDocument(
 ): string {
   const untrusted = stripPreviewNavigationGadgets(code);
   const cspMeta = `<meta http-equiv="Content-Security-Policy" content="${PREVIEW_CSP}">`;
-  const securityBootstrap = `${cspMeta}${PREVIEW_NAVIGATION_GUARD}`;
+  const fallbackStyle = `<style>html,body{min-height:100%;background:${PREVIEW_FALLBACK_BACKGROUND}}</style>`;
+  const securityBootstrap = `${cspMeta}${fallbackStyle}${PREVIEW_NAVIGATION_GUARD}`;
   const withoutDoctype = untrusted.replace(/<!doctype\b[^>]*>/gi, "");
   const htmlAttrs = withoutDoctype.match(/<html\b([^>]*)>/i)?.[1] || "";
   const completeDocument = withoutDoctype.match(
@@ -347,7 +350,7 @@ export function hardenPreviewDocument(
  */
 export function openHardenedPreview(code: string, title = "AI Battle preview"): void {
   const inner = hardenPreviewDocument(code);
-  const wrapper = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title><style>html,body{margin:0;height:100%;background:#0a0a0a}iframe{display:block;width:100%;height:100%;border:0;background:#fff}</style></head><body><iframe sandbox="${PREVIEW_SANDBOX}" allow="${PREVIEW_ALLOW}" referrerpolicy="no-referrer" srcdoc="${esc(inner)}" title="${esc(title)}"></iframe></body></html>`;
+  const wrapper = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title><style>html,body{margin:0;height:100%;background:${PREVIEW_FALLBACK_BACKGROUND}}iframe{display:block;width:100%;height:100%;border:0;background:${PREVIEW_FALLBACK_BACKGROUND}}</style></head><body><iframe sandbox="${PREVIEW_SANDBOX}" csp="${esc(PREVIEW_CSP)}" allow="${PREVIEW_ALLOW}" referrerpolicy="no-referrer" srcdoc="${esc(inner)}" title="${esc(title)}"></iframe></body></html>`;
   const url = URL.createObjectURL(new Blob([wrapper], { type: "text/html" }));
   window.open(url, "_blank", "noopener,noreferrer");
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
@@ -356,12 +359,35 @@ export function openHardenedPreview(code: string, title = "AI Battle preview"): 
 function previewIframeHTML(r: ResultView, resultKey: string): string {
   const doc = hardenPreviewDocument(r.code, { bridgeId: resultKey });
   return `
-    <div class="relative h-full bg-[var(--color-panel)] p-1.5">
+    <div class="relative h-full bg-[var(--color-surface)] p-1.5">
       <button data-action="reload-preview" data-model="${esc(resultKey)}" aria-label="Restart preview" class="absolute right-2 top-2 z-10 flex items-center gap-1 rounded-md border border-[var(--color-line)] bg-[var(--color-panel)]/90 px-2 py-1 text-[10px] text-[var(--color-ink-dim)] backdrop-blur transition-colors hover:text-[var(--color-ink)]" title="restart the demo">
         ${svg("i-refresh", "size-3.5")}<span>restart</span>
       </button>
-      <iframe data-preview="${esc(resultKey)}" class="h-full w-full rounded-lg bg-white shadow-inner" sandbox="${PREVIEW_SANDBOX}" allow="${PREVIEW_ALLOW}" referrerpolicy="no-referrer" srcdoc="${esc(doc)}" title="Preview generated by ${esc(r.id)}"></iframe>
+      <iframe data-preview="${esc(resultKey)}" class="h-full w-full rounded-lg bg-[var(--color-surface)] opacity-0 shadow-inner transition-opacity duration-300 ease-out motion-reduce:transition-none" sandbox="${PREVIEW_SANDBOX}" csp="${esc(PREVIEW_CSP)}" allow="${PREVIEW_ALLOW}" referrerpolicy="no-referrer" srcdoc="${esc(doc)}" title="Preview generated by ${esc(r.id)}"></iframe>
     </div>`;
+}
+
+/** Fade previews in only after their srcdoc has finished loading. */
+export function installPreviewFade(root: Document = document): void {
+  root.addEventListener(
+    "load",
+    (event) => {
+      const frame = event.target;
+      if (!(frame instanceof HTMLIFrameElement) || !frame.matches("iframe[data-preview]"))
+        return;
+      requestAnimationFrame(() => {
+        frame.classList.remove("opacity-0");
+        frame.classList.add("opacity-100");
+      });
+    },
+    true,
+  );
+}
+
+export function restartPreview(frame: HTMLIFrameElement): void {
+  frame.classList.remove("opacity-100");
+  frame.classList.add("opacity-0");
+  frame.srcdoc = frame.srcdoc;
 }
 
 // Content for a finished result (output / code / preview).

@@ -26,6 +26,8 @@ import {
   downsampleMetricSamples,
   installMetricTooltips,
   installTimelineTracking,
+  installPreviewFade,
+  restartPreview,
   modelBadge,
   type Battle,
   type HistoryResult,
@@ -1632,7 +1634,7 @@ els.results.addEventListener("click", async (e) => {
   } else if (action === "reload-preview") {
     // Restart the demo without spending tokens — just reload the iframe.
     const f = entry.el.querySelector("iframe[data-preview]") as HTMLIFrameElement | null;
-    if (f) f.srcdoc = f.srcdoc;
+    if (f) restartPreview(f);
   } else if (action === "dismiss-waiting") {
     entry.waitingDismissed = true;
     btn.closest("[data-waiting-overlay]")?.remove();
@@ -1951,4 +1953,5 @@ syncRunBtn();
 updateHistoryCount();
 installMetricTooltips();
 installTimelineTracking();
+installPreviewFade();
 loadModels();
