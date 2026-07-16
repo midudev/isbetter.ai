@@ -125,9 +125,10 @@
     align-items: center;
     gap: 0.5rem;
     color: var(--color-ink-faint);
+    font-family: var(--font-pixel);
     font-size: 0.6875rem;
     line-height: 1rem;
-    letter-spacing: 0.16em;
+    letter-spacing: 0.12em;
     text-transform: uppercase;
   }
 
@@ -136,9 +137,10 @@
     align-items: center;
     gap: 0.65rem;
     color: var(--color-ink);
+    font-family: var(--font-pixel);
     font-size: 0.75rem;
-    font-weight: 650;
-    letter-spacing: 0.01em;
+    font-weight: 500;
+    letter-spacing: 0.06em;
   }
 
   .composer-step {
@@ -150,9 +152,10 @@
     border-radius: 999px;
     background: rgba(215, 255, 63, 0.06);
     color: var(--color-accent);
-    font-family: var(--font-mono);
+    font-family: var(--font-pixel);
     font-size: 0.625rem;
     line-height: 1;
+    letter-spacing: 0.04em;
   }
 
   .key-hint {

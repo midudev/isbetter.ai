@@ -44,9 +44,10 @@ const arena = variant === "arena";
 			id="reveal-models-btn"
 			class="hidden min-h-9 items-center gap-1.5 rounded-lg border border-[var(--color-accent)]/40 bg-[var(--color-accent)]/10 px-3 text-[12px] text-[var(--color-accent)] transition-colors hover:bg-[var(--color-accent)]/15"
 			title="Reveal model identities"
+			aria-pressed="false"
 		>
-			<svg class="size-4"><use href="#i-eye"></use></svg>
-			<span>Reveal</span>
+			<svg class="size-4"><use id="reveal-models-icon" href="#i-eye"></use></svg>
+			<span id="reveal-models-label">Reveal</span>
 		</button>
 	</div>
 

@@ -1,11 +1,11 @@
 import { bind } from "cuelume";
 
-const DISMISS =
-  "#key-cancel, #history-close, #history-clear, [data-remove], [data-del]";
+const REMOVE = "[data-remove]";
+const DISMISS = "#key-cancel, #history-close, #history-clear, [data-del]";
 const EXPAND =
   "#key-btn, #history-btn, #run-btn, #reveal-models-btn, [data-openkeys], [data-action='open']";
 const TOGGLE =
-  "#add-model-btn, #sys-toggle, #scroll-link-btn, #blind-mode-btn, .view-tab, [data-provtab], [data-add]";
+  "#add-model-btn, #sys-toggle, #scroll-link-btn, #blind-mode-btn, #share-public-btn, .view-tab, [data-provtab], [data-add]";
 const SPARKLE =
   "#sys-reset, #rerun-all-btn, [data-prompt-example], [data-action='rerun'], [data-action='reload-preview']";
 const SUCCESS = "#key-save, [data-action='copy']";
@@ -24,7 +24,9 @@ function decorate(element: Element) {
     return;
   }
 
-  if (control.matches(DISMISS)) {
+  if (control.matches(REMOVE)) {
+    setCue(control, "data-cuelume-toggle", "tick");
+  } else if (control.matches(DISMISS)) {
     setCue(control, "data-cuelume-toggle", "droplet");
   } else if (control.matches(EXPAND)) {
     setCue(control, "data-cuelume-toggle", "bloom");

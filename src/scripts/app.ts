@@ -14,6 +14,7 @@ import {
   statsRowHTML,
   thoughtsHTML,
   doneContentHTML,
+  openHardenedPreview,
   loadHistory,
   saveHistory,
   fmtWhen,
@@ -47,7 +48,7 @@ Respond in TWO parts, in this exact order:
    - Start with <!doctype html> and include <html>, <head> and <body>.
    - Put ALL CSS inside one <style> tag in the <head>.
    - Put ALL JavaScript inside one <script> tag (vanilla JS, no build step, no frameworks).
-   - Make NO network requests: no CDNs, no imports, no external fonts, images or scripts. It must run fully offline inside a sandboxed iframe.
+   - Make NO network requests: no CDNs, no imports, no external fonts, images or scripts. It must run fully offline inside a sandboxed iframe with a strict CSP (external URLs and fetch are blocked).
    - Use inline SVG instead of icon fonts/libraries. Use data: URIs only if an image is truly required.
    - Be polished, responsive, accessible and immediately runnable.
 
@@ -83,6 +84,7 @@ const LS = {
   view: "ab:view",
   scrollLink: SCROLLLINK_KEY,
   blind: "ab:blind",
+  sharePublic: "ab:share-public",
 };
 const keyLS = (p: ProviderId) => `ab:key:${p}`;
 
@@ -154,6 +156,7 @@ const chatUrlFor = (p: ProviderId) =>
 let viewMode = (localStorage.getItem(LS.view) as ViewMode) || "preview";
 let scrollLink = localStorage.getItem(LS.scrollLink) === "1";
 let blindMode = localStorage.getItem(LS.blind) === "1";
+let sharePublic = localStorage.getItem(LS.sharePublic) === "1";
 let revealed = !blindMode;
 let blindOrder: string[] = [];
 const blindAliases = new Map<string, string>();
@@ -219,7 +222,12 @@ const els = {
   blindBtn: $<HTMLButtonElement>("#blind-mode-btn"),
   blindIcon: $("#blind-mode-icon"),
   blindCheck: $("#blind-mode-check"),
+  sharePublicBtn: $<HTMLButtonElement>("#share-public-btn"),
+  sharePublicIcon: $("#share-public-icon"),
+  sharePublicCheck: $("#share-public-check"),
   revealBtn: $<HTMLButtonElement>("#reveal-models-btn"),
+  revealIcon: $("#reveal-models-icon"),
+  revealLabel: $("#reveal-models-label"),
   status: $("#battle-status"),
   summary: $("#battle-summary"),
   summaryList: $("#battle-summary-list"),
@@ -228,6 +236,8 @@ const els = {
   sharePanel: $("#share-panel"),
   shareBtn: $<HTMLButtonElement>("#share-battle-btn"),
   shareStatus: $("#share-status"),
+  shareUrlRow: $("#share-url-row"),
+  shareUrl: $<HTMLInputElement>("#share-url"),
   results: $("#results"),
   empty: $("#empty-state"),
   resultsToolbarWrap: $("#results-toolbar-wrap"),
@@ -716,9 +726,13 @@ function refreshBlindUI() {
   const complete =
     entries.size > 0 &&
     [...entries.values()].every((entry) => entry.state === "done" || entry.state === "error");
-  const canReveal = isConcealed() && complete && !running;
-  els.revealBtn.classList.toggle("hidden", !canReveal);
-  els.revealBtn.classList.toggle("flex", canReveal);
+  const canToggleReveal = blindMode && complete && !running;
+  els.revealBtn.classList.toggle("hidden", !canToggleReveal);
+  els.revealBtn.classList.toggle("flex", canToggleReveal);
+  els.revealBtn.setAttribute("aria-pressed", String(revealed));
+  els.revealBtn.title = revealed ? "Hide model identities again" : "Reveal model identities";
+  els.revealIcon.setAttribute("href", revealed ? "#i-eye-off" : "#i-eye");
+  els.revealLabel.textContent = revealed ? "Hide" : "Reveal";
 }
 
 function rerenderIdentities() {
@@ -743,18 +757,39 @@ function toggleBlindMode() {
 }
 els.blindBtn.addEventListener("click", toggleBlindMode);
 
+function refreshSharePublicUI() {
+  els.sharePublicIcon.setAttribute("href", sharePublic ? "#i-link" : "#i-world");
+  els.sharePublicBtn.classList.toggle("border-[var(--color-accent)]", sharePublic);
+  els.sharePublicBtn.classList.toggle("text-[var(--color-accent)]", sharePublic);
+  els.sharePublicBtn.classList.toggle("text-[var(--color-ink-dim)]", !sharePublic);
+  els.sharePublicBtn.setAttribute("aria-pressed", String(sharePublic));
+  refreshToggleCheck(els.sharePublicCheck, sharePublic);
+  els.sharePublicBtn.disabled = running;
+}
+
+function toggleSharePublic() {
+  if (running) return;
+  sharePublic = !sharePublic;
+  localStorage.setItem(LS.sharePublic, sharePublic ? "1" : "0");
+  refreshSharePublicUI();
+}
+els.sharePublicBtn.addEventListener("click", toggleSharePublic);
+
 els.revealBtn.addEventListener("click", () => {
-  revealed = true;
+  if (!blindMode) return;
+  revealed = !revealed;
   if (currentBattleId) {
     const battle = history.find((item) => battleId(item) === currentBattleId);
     if (battle?.blind) {
-      battle.blind.revealed = true;
+      battle.blind.revealed = revealed;
       persistHistory();
     }
   }
   refreshBlindUI();
   rerenderIdentities();
-  els.status.textContent = "Model identities revealed";
+  els.status.textContent = revealed
+    ? "Model identities revealed"
+    : "Model identities hidden again";
   els.status.classList.remove("hidden");
   setTimeout(() => {
     if (!running) els.status.classList.add("hidden");
@@ -817,6 +852,7 @@ function syncRunBtn() {
   }
   els.rerunAllBtn.disabled = running;
   els.blindBtn.disabled = running;
+  els.sharePublicBtn.disabled = running;
   // "Re-run all" only matters once there are results to refresh.
   els.rerunAllBtn.classList.toggle("hidden", entries.size === 0);
 }
@@ -1605,10 +1641,7 @@ els.results.addEventListener("click", async (e) => {
     await callModel(entry);
     computeBests();
   } else if (action === "open" && entry.code) {
-    const blob = new Blob([entry.code], { type: "text/html" });
-    const url = URL.createObjectURL(blob);
-    window.open(url, "_blank");
-    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    openHardenedPreview(entry.code, `Preview · ${entry.label || entry.id}`);
   }
 });
 
@@ -1634,8 +1667,11 @@ function resetSharePanel() {
   els.sharePanel.classList.add("hidden");
   els.shareStatus.classList.add("hidden");
   els.shareStatus.textContent = "";
+  els.shareUrlRow.classList.add("hidden");
+  els.shareUrlRow.classList.remove("flex");
+  els.shareUrl.value = "";
   els.shareBtn.disabled = false;
-  els.shareBtn.querySelector("span")!.textContent = "Publish results";
+  els.shareBtn.querySelector("span")!.textContent = "Publish & get link";
   els.shareBtn.querySelector("use")!.setAttribute("href", "#i-world");
 }
 
@@ -1649,13 +1685,20 @@ function showSharePanel(battle: Battle) {
   if (!battle.sharedId) {
     els.shareStatus.classList.add("hidden");
     els.shareStatus.textContent = "";
-    els.shareBtn.querySelector("span")!.textContent = "Publish results";
+    els.shareUrlRow.classList.add("hidden");
+    els.shareUrlRow.classList.remove("flex");
+    els.shareUrl.value = "";
+    els.shareBtn.querySelector("span")!.textContent = "Publish & get link";
     els.shareBtn.querySelector("use")!.setAttribute("href", "#i-world");
     return;
   }
   const url = publicBattleUrl(battle.sharedId);
+  els.shareUrl.value = url;
+  els.shareUrlRow.classList.remove("hidden");
+  els.shareUrlRow.classList.add("flex");
   els.shareStatus.className = "mt-2 text-[11px] text-emerald-400";
-  els.shareStatus.innerHTML = `Published. <a class="underline underline-offset-2 hover:text-emerald-300" href="${esc(url)}" target="_blank" rel="noopener">Open public battle</a>`;
+  els.shareStatus.classList.remove("hidden");
+  els.shareStatus.innerHTML = `Published anonymously. <a class="underline underline-offset-2 hover:text-emerald-300" href="${esc(url)}" target="_blank" rel="noopener">Open public battle</a>`;
   els.shareBtn.querySelector("span")!.textContent = "Copy link";
   els.shareBtn.querySelector("use")!.setAttribute("href", "#i-copy");
 }
@@ -1664,25 +1707,30 @@ async function copyPublicBattleUrl(id: string) {
   await navigator.clipboard.writeText(publicBattleUrl(id));
   play("success");
   els.shareStatus.className = "mt-2 text-[11px] text-emerald-400";
-  els.shareStatus.textContent = "Public link copied to your clipboard.";
+  els.shareStatus.classList.remove("hidden");
+  els.shareStatus.textContent = "Unique public link copied to your clipboard.";
 }
 
-els.shareBtn.addEventListener("click", async () => {
-  const battle = history.find((item) => battleId(item) === currentBattleId);
-  if (!battle) return;
+async function publishBattle(battle: Battle): Promise<boolean> {
+  if (!battle.results.some((result) => result.state === "done")) {
+    resetSharePanel();
+    return false;
+  }
   if (battle.sharedId) {
+    showSharePanel(battle);
     try {
       await copyPublicBattleUrl(battle.sharedId);
     } catch {
-      showSharePanel(battle);
+      /* clipboard may be blocked; URL is still visible */
     }
-    return;
+    return true;
   }
 
   els.shareBtn.disabled = true;
   els.shareBtn.querySelector("span")!.textContent = "Publishing…";
   els.shareStatus.className = "mt-2 text-[11px] text-[var(--color-ink-faint)]";
-  els.shareStatus.textContent = "Uploading the public results…";
+  els.shareStatus.classList.remove("hidden");
+  els.shareStatus.textContent = "Uploading prompt and model results (no API keys)…";
   try {
     const response = await fetch("/api/battles", {
       method: "POST",
@@ -1698,16 +1746,36 @@ els.shareBtn.addEventListener("click", async () => {
     try {
       await copyPublicBattleUrl(data.id);
     } catch {
-      showSharePanel(battle);
+      /* clipboard may be blocked; URL is still visible */
     }
+    return true;
   } catch (error) {
     els.shareBtn.disabled = false;
     els.shareBtn.querySelector("span")!.textContent = "Try again";
     els.shareStatus.className = "mt-2 text-[11px] text-red-400";
+    els.shareStatus.classList.remove("hidden");
     els.shareStatus.textContent =
       error instanceof Error ? error.message : "Could not publish this battle.";
+    return false;
   }
+}
+
+els.shareBtn.addEventListener("click", async () => {
+  const battle = history.find((item) => battleId(item) === currentBattleId);
+  if (!battle) return;
+  if (battle.sharedId) {
+    try {
+      await copyPublicBattleUrl(battle.sharedId);
+    } catch {
+      showSharePanel(battle);
+    }
+    return;
+  }
+  await publishBattle(battle);
 });
+
+els.shareUrl.addEventListener("focus", () => els.shareUrl.select());
+els.shareUrl.addEventListener("click", () => els.shareUrl.select());
 
 function updateHistoryCount() {
   const n = history.length;
@@ -1742,7 +1810,11 @@ function saveBattle() {
       genMs: e.genMs,
       metrics: downsampleMetricSamples(e.metrics),
     }));
-  if (!results.length) return;
+  // Nothing useful to keep or publish when every model failed (e.g. network/CORS).
+  if (!results.some((result) => result.state === "done")) {
+    resetSharePanel();
+    return;
+  }
   const ts = Date.now();
   currentBattleId = `${ts}-${(battleSeq++).toString(36)}`;
   const battle: Battle = {
@@ -1764,6 +1836,7 @@ function saveBattle() {
   history.unshift(battle);
   persistHistory();
   showSharePanel(battle);
+  if (sharePublic) void publishBattle(battle);
 }
 
 function renderHistory() {
@@ -1873,6 +1946,7 @@ refreshKeyUI();
 refreshViewTabs();
 refreshScrollBtn();
 refreshBlindUI();
+refreshSharePublicUI();
 syncRunBtn();
 updateHistoryCount();
 installMetricTooltips();

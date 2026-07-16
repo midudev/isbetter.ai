@@ -162,7 +162,7 @@ const PROMPT_EXAMPLES = [
 								aria-label="Example prompts"
 								aria-hidden="false"
 							>
-								<span class="shrink-0 px-1 text-[9px] font-semibold uppercase tracking-[0.14em] text-[var(--color-ink-faint)]">Try</span>
+								<span class="shrink-0 px-1 font-pixel text-[9px] uppercase tracking-[0.14em] text-[var(--color-ink-faint)]">Try</span>
 								{PROMPT_EXAMPLES.map((example) => (
 									<button
 										type="button"
@@ -177,18 +177,31 @@ const PROMPT_EXAMPLES = [
 						</div>
 						<div class="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 							<p id="prompt-error" class="hidden text-[11px] text-red-400" role="alert">Write a prompt before starting the battle.</p>
-							<div class="flex w-full items-center gap-2 sm:ml-auto sm:w-auto">
+							<div class="flex w-full flex-wrap items-center gap-2 sm:ml-auto sm:w-auto sm:flex-nowrap">
 								<button
 									id="blind-mode-btn"
 									type="button"
 									class="control-surface flex min-h-11 flex-1 items-center justify-center gap-2 px-3 text-[11px] sm:flex-none"
-									title="Hide model identities · shortcut: B"
+									data-tip="Hide model names until you reveal them. Cards are shuffled so you judge quality without knowing who wrote what. Shortcut: B"
 									aria-pressed="false"
 								>
 									<svg class="size-4"><use id="blind-mode-icon" href="#i-eye"></use></svg>
 									<span>Blind comparison</span>
 									<kbd class="key-hint">B</kbd>
 									<span id="blind-mode-check" class="grid size-4 place-items-center rounded border border-[var(--color-line-hi)] text-transparent" aria-hidden="true">
+										<svg class="size-3"><use href="#i-check"></use></svg>
+									</span>
+								</button>
+								<button
+									id="share-public-btn"
+									type="button"
+									class="control-surface flex min-h-11 flex-1 items-center justify-center gap-2 px-3 text-[11px] sm:flex-none"
+									data-tip="When enabled, successful results are published after the battle and you get a unique shareable URL. Only the prompt and model outputs are uploaded — never API keys or personal data. Fully anonymous."
+									aria-pressed="false"
+								>
+									<svg class="size-4"><use id="share-public-icon" href="#i-world"></use></svg>
+									<span>Share public</span>
+									<span id="share-public-check" class="grid size-4 place-items-center rounded border border-[var(--color-line-hi)] text-transparent" aria-hidden="true">
 										<svg class="size-3"><use href="#i-check"></use></svg>
 									</span>
 								</button>
@@ -208,7 +221,7 @@ const PROMPT_EXAMPLES = [
 
 			<section class="results-stage pt-7 sm:pt-9" aria-labelledby="results-title">
 				<header class="flex min-h-11 flex-wrap items-center justify-between gap-3">
-					<h2 id="results-title" class="text-[15px] font-semibold text-[var(--color-ink)]">Results</h2>
+					<h2 id="results-title" class="font-pixel text-[14px] tracking-[0.04em] text-[var(--color-ink)]">Results</h2>
 					<div id="results-toolbar-wrap" class="hidden">
 						<ViewToolbar />
 					</div>
@@ -226,7 +239,7 @@ const PROMPT_EXAMPLES = [
 			<header class="flex flex-wrap items-center gap-3 border-b border-[var(--color-line)] px-4 py-3.5 sm:px-5">
 				<svg class="size-4 text-[var(--color-accent)]"><use href="#i-trophy"></use></svg>
 				<div>
-					<h2 class="text-[11px] uppercase tracking-[0.16em] text-[var(--color-ink)]">Battle analysis</h2>
+					<h2 class="font-pixel text-[11px] uppercase tracking-[0.14em] text-[var(--color-ink)]">Battle analysis</h2>
 					<p class="mt-0.5 text-[10px] text-[var(--color-ink-faint)]">Performance and cost, normalized side by side</p>
 				</div>
 			</header>
@@ -243,12 +256,21 @@ const PROMPT_EXAMPLES = [
 						<svg class="size-4"><use href="#i-world"></use></svg>
 					</span>
 					<div>
-						<h2 id="share-title" class="text-[13px] text-[var(--color-ink)]">Publish these results on the web</h2>
+						<h2 id="share-title" class="text-[13px] text-[var(--color-ink)]">Share these results?</h2>
 						<p class="mt-1 text-[11px] leading-relaxed text-[var(--color-ink-faint)]">
-							Only the prompt, successful responses, metrics and chart data will be uploaded.
-							Your API keys, system prompt and model reasoning are never sent.
+							Optional and fully anonymous. Only the prompt and successful model results are uploaded —
+							never your API keys, system prompt, or any personal information. Publishing creates a unique URL you can copy and share.
 						</p>
 						<p id="share-status" class="mt-2 hidden text-[11px]" role="status" aria-live="polite"></p>
+						<div id="share-url-row" class="mt-3 hidden flex-wrap items-center gap-2">
+							<input
+								id="share-url"
+								type="text"
+								readonly
+								class="min-w-0 flex-1 rounded-lg border border-[var(--color-line-hi)] bg-[var(--color-panel)] px-3 py-2 font-mono text-[11px] text-[var(--color-ink)] outline-none focus:border-[var(--color-accent)]"
+								aria-label="Public battle URL"
+							/>
+						</div>
 					</div>
 				</div>
 				<button
@@ -257,7 +279,7 @@ const PROMPT_EXAMPLES = [
 					class="flex shrink-0 items-center justify-center gap-2 rounded-lg bg-[var(--color-accent)] px-4 py-2.5 text-[12px] font-medium text-black transition-opacity hover:opacity-90 disabled:cursor-wait disabled:opacity-50"
 				>
 					<svg class="size-4"><use href="#i-world"></use></svg>
-					<span>Publish results</span>
+					<span>Publish &amp; get link</span>
 				</button>
 			</div>
 		</section>

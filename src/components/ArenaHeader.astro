@@ -9,12 +9,14 @@ const review = variant === "review";
 
 <header class:list={["flex min-h-14 items-center gap-3 py-2.5", review ? "justify-between" : "justify-end"]}>
 	{review && (
-		<a href="/" class="group flex min-w-0 items-center gap-3" aria-label="AI Battle home">
+		<a href="/" class="group flex min-w-0 items-center gap-3" aria-label="isBetter.ai home">
 			<span class="grid size-9 shrink-0 place-items-center rounded-[0.65rem] border border-[var(--color-accent)]/20 bg-[var(--color-accent)]/[0.06] transition-colors group-hover:border-[var(--color-accent)]/40">
 				<img src="/favicon.svg" alt="" class="size-5" />
 			</span>
-			<p class="truncate text-[14px] font-semibold tracking-[-0.02em] text-[var(--color-ink)] sm:text-[15px]">
-				Battle review
+			<p class="truncate font-pixel text-[12px] tracking-[0.06em] text-[var(--color-ink)] sm:text-[13px]">
+				<span class="text-[var(--color-accent)]">isBetter.ai</span>
+				<span class="text-[var(--color-ink-faint)]"> - </span>
+				<span>Battle review</span>
 			</p>
 		</a>
 	)}

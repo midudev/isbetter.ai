@@ -7,6 +7,7 @@ import {
   loadHistory,
   saveHistory,
   doneContentHTML,
+  openHardenedPreview,
   statsRowHTML,
   esc,
   svg,
@@ -113,7 +114,8 @@ async function initBattle(b: Battle) {
       });
   }
 
-  let viewMode = (localStorage.getItem(VIEW_KEY) as ViewMode) || "preview";
+  // Review pages always open on Preview so you see the rendered result first.
+  let viewMode: ViewMode = "preview";
   let scrollLink = localStorage.getItem(SCROLLLINK_KEY) === "1";
   const results = $("#results");
   const revealBtn = $("#reveal-models-btn");
@@ -188,11 +190,21 @@ async function initBattle(b: Battle) {
         <div class="h-[clamp(20rem,50vh,38rem)] bg-[var(--color-surface)]">${content}</div>
       </article>`;
   }
+  const revealIcon = $("#reveal-models-icon");
+  const revealLabel = $("#reveal-models-label");
+  const refreshRevealBtn = () => {
+    const blind = !!b.blind?.enabled;
+    revealBtn.classList.toggle("hidden", !blind);
+    revealBtn.classList.toggle("flex", blind);
+    revealBtn.setAttribute("aria-pressed", String(revealed));
+    revealBtn.title = revealed ? "Hide model identities again" : "Reveal model identities";
+    revealIcon.setAttribute("href", revealed ? "#i-eye-off" : "#i-eye");
+    revealLabel.textContent = revealed ? "Hide" : "Reveal";
+  };
   const renderAll = () => {
     results.innerHTML = views.map(cardHTML).join("");
     renderSummary();
-    revealBtn.classList.toggle("hidden", !concealed());
-    revealBtn.classList.toggle("flex", concealed());
+    refreshRevealBtn();
   };
   renderAll();
 
@@ -261,12 +273,15 @@ async function initBattle(b: Battle) {
   installScrollSync(() => scrollLink);
 
   revealBtn.addEventListener("click", () => {
-    revealed = true;
-    if (b.blind) b.blind.revealed = true;
+    if (!b.blind?.enabled) return;
+    revealed = !revealed;
+    b.blind.revealed = revealed;
     const history = loadHistory();
     const saved = history.find((item) => item.id === b.id || item.ts === b.ts);
-    if (saved?.blind) saved.blind.revealed = true;
-    saveHistory(history);
+    if (saved?.blind) {
+      saved.blind.revealed = revealed;
+      saveHistory(history);
+    }
     renderAll();
   });
 
@@ -291,10 +306,7 @@ async function initBattle(b: Battle) {
         ?.querySelector("iframe[data-preview]") as HTMLIFrameElement | null;
       if (f) f.srcdoc = f.srcdoc;
     } else if (btn.dataset.action === "open" && v.code) {
-      const blob = new Blob([v.code], { type: "text/html" });
-      const url = URL.createObjectURL(blob);
-      window.open(url, "_blank");
-      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      openHardenedPreview(v.code, `Preview · ${displayLabel(v)}`);
     }
   });
 
