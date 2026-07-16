@@ -582,7 +582,34 @@ function timelineColor(_result: SummaryResult, index: number) {
   return TIMELINE_COLORS[index % TIMELINE_COLORS.length];
 }
 
-export function renderMetricsTimeline(results: SummaryResult[]): string {
+const TIMELINE_WIDTH = 760;
+const TIMELINE_HEIGHT = 246;
+const TIMELINE_LEFT = 58;
+const TIMELINE_RIGHT = 64;
+const TIMELINE_TOP = 25;
+const TIMELINE_BOTTOM = 38;
+const TIMELINE_PLOT_WIDTH = TIMELINE_WIDTH - TIMELINE_LEFT - TIMELINE_RIGHT;
+const TIMELINE_PLOT_HEIGHT = TIMELINE_HEIGHT - TIMELINE_TOP - TIMELINE_BOTTOM;
+
+type TimelineSeries = {
+  key: string;
+  label: string;
+  color: string;
+  index: number;
+  samples: MetricSample[];
+};
+
+type TimelineModel = {
+  series: TimelineSeries[];
+  keys: string;
+  maxTime: number;
+  maxTokens: number;
+  maxCost: number;
+  hasKnownCosts: boolean;
+  trackingSeries: { label: string; color: string; samples: MetricSample[] }[];
+};
+
+function buildTimelineModel(results: SummaryResult[]): TimelineModel | null {
   const sampledResults = results.filter(
     (result) => result.state !== "error" && (result.metrics?.length || 0) > 0,
   );
@@ -593,46 +620,55 @@ export function renderMetricsTimeline(results: SummaryResult[]): string {
         .map((sample) => sample.tMs),
     ),
   );
-  if (!Number.isFinite(firstResponse)) {
-    const hasMetrics = sampledResults.length > 0;
-    return `
-      <div class="grid min-h-44 place-items-center px-6 py-8 text-center">
-        <div class="max-w-sm text-[11px] leading-relaxed text-[var(--color-ink-faint)]">
-          ${svg("i-gauge", "mx-auto mb-3 size-6 opacity-60")}
-          <p>${hasMetrics ? "Waiting for the first model response…" : "Timeline data is unavailable for battles created before this feature."}</p>
-        </div>
-      </div>`;
-  }
+  if (!Number.isFinite(firstResponse)) return null;
 
   const series = results
     .map((result, index) => {
       const samples = (result.metrics || [])
         .filter((sample) => sample.tMs >= firstResponse && sample.completionTokens > 0)
         .map((sample) => ({ ...sample, tMs: sample.tMs - firstResponse }));
-      return { result, samples, color: timelineColor(result, index), index };
+      return {
+        key: result.key,
+        label: result.label,
+        color: timelineColor(result, index),
+        index,
+        samples,
+        state: result.state,
+      };
     })
-    .filter(({ result, samples }) => result.state !== "error" && samples.length > 0);
+    .filter((item) => item.state !== "error" && item.samples.length > 0)
+    .map(({ state: _state, ...item }) => item);
 
-  const width = 760;
-  const height = 246;
-  const left = 58;
-  const right = 64;
-  const top = 25;
-  const bottom = 38;
-  const plotWidth = width - left - right;
-  const plotHeight = height - top - bottom;
+  if (!series.length) return null;
+
   const allSamples = series.flatMap(({ samples }) => samples);
-  const maxTime = Math.max(1, ...allSamples.map((sample) => sample.tMs));
-  const maxTokens = Math.max(1, ...allSamples.map((sample) => sample.completionTokens)) * 1.08;
   const knownCosts = allSamples.filter((sample) => sample.costKnown);
-  const maxCost = Math.max(1e-9, ...knownCosts.map((sample) => sample.cost)) * 1.08;
-  const x = (tMs: number) => left + (tMs / maxTime) * plotWidth;
-  const tokenY = (value: number) => top + plotHeight - (value / maxTokens) * plotHeight;
-  const costY = (value: number) => top + plotHeight - (value / maxCost) * plotHeight;
-  const xTicks = Array.from({ length: 5 }, (_, index) => (maxTime * index) / 4);
-  const tokenTicks = Array.from({ length: 5 }, (_, index) => (maxTokens * index) / 4);
+  return {
+    series,
+    keys: series.map((item) => item.key).join("|"),
+    maxTime: Math.max(1, ...allSamples.map((sample) => sample.tMs)),
+    maxTokens: Math.max(1, ...allSamples.map((sample) => sample.completionTokens)) * 1.08,
+    maxCost: Math.max(1e-9, ...knownCosts.map((sample) => sample.cost)) * 1.08,
+    hasKnownCosts: knownCosts.length > 0,
+    trackingSeries: series.map(({ label, color, samples }) => ({ label, color, samples })),
+  };
+}
 
-  const gradients = series
+function timelineEmptyHTML(results: SummaryResult[]): string {
+  const hasMetrics = results.some(
+    (result) => result.state !== "error" && (result.metrics?.length || 0) > 0,
+  );
+  return `
+    <div data-timeline-empty class="grid min-h-44 place-items-center px-6 py-8 text-center">
+      <div class="max-w-sm text-[11px] leading-relaxed text-[var(--color-ink-faint)]">
+        ${svg("i-gauge", "mx-auto mb-3 size-6 opacity-60")}
+        <p>${hasMetrics ? "Waiting for the first model response…" : "Timeline data is unavailable for battles created before this feature."}</p>
+      </div>
+    </div>`;
+}
+
+function timelineDefsHTML(model: TimelineModel): string {
+  return model.series
     .map(
       ({ color, index }) => `
         <linearGradient id="timeline-fill-${index}" x1="0" y1="0" x2="0" y2="1">
@@ -641,26 +677,43 @@ export function renderMetricsTimeline(results: SummaryResult[]): string {
         </linearGradient>`,
     )
     .join("");
-  const grid = [
+}
+
+function timelineGridHTML(model: TimelineModel): string {
+  const { maxTime, maxTokens, maxCost, hasKnownCosts } = model;
+  const x = (tMs: number) => TIMELINE_LEFT + (tMs / maxTime) * TIMELINE_PLOT_WIDTH;
+  const tokenY = (value: number) =>
+    TIMELINE_TOP + TIMELINE_PLOT_HEIGHT - (value / maxTokens) * TIMELINE_PLOT_HEIGHT;
+  const xTicks = Array.from({ length: 5 }, (_, index) => (maxTime * index) / 4);
+  const tokenTicks = Array.from({ length: 5 }, (_, index) => (maxTokens * index) / 4);
+  return [
     ...tokenTicks.map((value, index) => {
       const cy = tokenY(value);
       const costValue = (maxCost * index) / 4;
       return `
-        <line x1="${left}" y1="${cy}" x2="${width - right}" y2="${cy}" stroke="rgba(255,255,255,.08)" stroke-dasharray="3 7"/>
-        <text x="${left - 10}" y="${cy + 4}" text-anchor="end" fill="#858585" font-size="9">${fmtInt(Math.round(value))}</text>
-        ${knownCosts.length ? `<text x="${width - right + 10}" y="${cy + 4}" text-anchor="start" fill="#858585" font-size="9">${fmtCost(costValue)}</text>` : ""}`;
+        <line x1="${TIMELINE_LEFT}" y1="${cy}" x2="${TIMELINE_WIDTH - TIMELINE_RIGHT}" y2="${cy}" stroke="rgba(255,255,255,.08)" stroke-dasharray="3 7"/>
+        <text x="${TIMELINE_LEFT - 10}" y="${cy + 4}" text-anchor="end" fill="#858585" font-size="9">${fmtInt(Math.round(value))}</text>
+        ${hasKnownCosts ? `<text x="${TIMELINE_WIDTH - TIMELINE_RIGHT + 10}" y="${cy + 4}" text-anchor="start" fill="#858585" font-size="9">${fmtCost(costValue)}</text>` : ""}`;
     }),
     ...xTicks.map((value) => {
       const cx = x(value);
       return `
-        <line x1="${cx}" y1="${top}" x2="${cx}" y2="${top + plotHeight}" stroke="rgba(255,255,255,.045)"/>
-        <text x="${cx}" y="${height - 14}" text-anchor="middle" fill="#858585" font-size="9">${esc(fmtDur(value))}</text>`;
+        <line x1="${cx}" y1="${TIMELINE_TOP}" x2="${cx}" y2="${TIMELINE_TOP + TIMELINE_PLOT_HEIGHT}" stroke="rgba(255,255,255,.045)"/>
+        <text x="${cx}" y="${TIMELINE_HEIGHT - 14}" text-anchor="middle" fill="#858585" font-size="9">${esc(fmtDur(value))}</text>`;
     }),
   ].join("");
-  const paths = series
+}
+
+function timelinePlotHTML(model: TimelineModel): string {
+  const { maxTime, maxTokens, maxCost } = model;
+  const x = (tMs: number) => TIMELINE_LEFT + (tMs / maxTime) * TIMELINE_PLOT_WIDTH;
+  const tokenY = (value: number) =>
+    TIMELINE_TOP + TIMELINE_PLOT_HEIGHT - (value / maxTokens) * TIMELINE_PLOT_HEIGHT;
+  const costY = (value: number) =>
+    TIMELINE_TOP + TIMELINE_PLOT_HEIGHT - (value / maxCost) * TIMELINE_PLOT_HEIGHT;
+  return model.series
     .map(({ samples, color, index }) => {
       const tokenPoints = samples.map((sample) => ({
-        sample,
         cx: x(sample.tMs),
         cy: tokenY(sample.completionTokens),
       }));
@@ -669,7 +722,7 @@ export function renderMetricsTimeline(results: SummaryResult[]): string {
         .join(" ");
       const first = tokenPoints[0];
       const last = tokenPoints[tokenPoints.length - 1];
-      const area = `${tokenLine} L${last.cx.toFixed(1)},${(top + plotHeight).toFixed(1)} L${first.cx.toFixed(1)},${(top + plotHeight).toFixed(1)} Z`;
+      const area = `${tokenLine} L${last.cx.toFixed(1)},${(TIMELINE_TOP + TIMELINE_PLOT_HEIGHT).toFixed(1)} L${first.cx.toFixed(1)},${(TIMELINE_TOP + TIMELINE_PLOT_HEIGHT).toFixed(1)} Z`;
       const costPoints = samples
         .filter((sample) => sample.costKnown)
         .map((sample) => ({ cx: x(sample.tMs), cy: costY(sample.cost) }));
@@ -685,42 +738,54 @@ export function renderMetricsTimeline(results: SummaryResult[]): string {
         ${lastCost ? `<circle cx="${lastCost.cx.toFixed(1)}" cy="${lastCost.cy.toFixed(1)}" r="3.5" fill="#0f0f0f" stroke="${color}" stroke-width="2" vector-effect="non-scaling-stroke"/>` : ""}`;
     })
     .join("");
-  const legend = series
+}
+
+function timelineLegendHTML(model: TimelineModel): string {
+  return model.series
     .map(
-      ({ result, color }) => `
+      ({ label, color }) => `
         <li class="flex min-w-0 items-center gap-1.5">
           <span class="size-2 shrink-0 rounded-full" style="background:${color};box-shadow:0 0 10px ${color}80"></span>
-          <span class="max-w-52 truncate text-[10px] text-[var(--color-ink-dim)]">${esc(result.label)}</span>
+          <span class="max-w-52 truncate text-[10px] text-[var(--color-ink-dim)]">${esc(label)}</span>
         </li>`,
     )
     .join("");
-  const trackingSeries = series.map(({ result, samples, color }) => ({
-    label: result.label,
-    color,
-    samples,
-  }));
+}
 
+function applyTimelineFigureData(figure: HTMLElement, model: TimelineModel) {
+  figure.dataset.seriesKeys = model.keys;
+  figure.dataset.series = JSON.stringify(model.trackingSeries);
+  figure.dataset.maxTime = String(model.maxTime);
+  figure.dataset.maxTokens = String(model.maxTokens);
+  figure.dataset.maxCost = String(model.maxCost);
+  figure.dataset.chartLeft = String(TIMELINE_LEFT);
+  figure.dataset.chartRight = String(TIMELINE_RIGHT);
+  figure.dataset.chartTop = String(TIMELINE_TOP);
+  figure.dataset.chartBottom = String(TIMELINE_BOTTOM);
+}
+
+function timelineChartHTML(model: TimelineModel): string {
   return `
-    <figure data-timeline-chart data-series="${esc(JSON.stringify(trackingSeries))}" data-max-time="${maxTime}" data-max-tokens="${maxTokens}" data-max-cost="${maxCost}" data-chart-left="${left}" data-chart-right="${right}" data-chart-top="${top}" data-chart-bottom="${bottom}" class="relative" aria-label="Tokens and cost timeline by model">
+    <figure data-timeline-chart class="relative" aria-label="Tokens and cost timeline by model">
       <div class="scroll-affordance overflow-x-auto">
-        <svg viewBox="0 0 ${width} ${height}" class="min-w-[36rem] w-full" role="img" aria-labelledby="timeline-title timeline-desc">
+        <svg viewBox="0 0 ${TIMELINE_WIDTH} ${TIMELINE_HEIGHT}" class="min-w-[36rem] w-full" role="img" aria-labelledby="timeline-title timeline-desc">
           <title id="timeline-title">Tokens and cost generated over time</title>
           <desc id="timeline-desc">Solid lines show output tokens and dashed lines show cost. The timeline begins when the first model responds.</desc>
-          <defs>${gradients}</defs>
-          ${grid}
-          ${paths}
-          <text x="${left}" y="14" fill="#a1a1a1" font-size="9" letter-spacing="1.2">TOKENS</text>
-          ${knownCosts.length ? `<text x="${width - right}" y="14" text-anchor="end" fill="#a1a1a1" font-size="9" letter-spacing="1.2">COST (USD)</text>` : ""}
+          <defs data-timeline-defs>${timelineDefsHTML(model)}</defs>
+          <g data-timeline-grid>${timelineGridHTML(model)}</g>
+          <g data-timeline-plot>${timelinePlotHTML(model)}</g>
+          <text x="${TIMELINE_LEFT}" y="14" fill="#a1a1a1" font-size="9" letter-spacing="1.2">TOKENS</text>
+          <text data-timeline-cost-label x="${TIMELINE_WIDTH - TIMELINE_RIGHT}" y="14" text-anchor="end" fill="#a1a1a1" font-size="9" letter-spacing="1.2" ${model.hasKnownCosts ? "" : 'visibility="hidden"'}>COST (USD)</text>
           <g data-timeline-crosshair visibility="hidden">
-            <line data-timeline-crosshair-line x1="${left}" y1="${top}" x2="${left}" y2="${top + plotHeight}" stroke="rgba(255,255,255,.55)" stroke-width="1" stroke-dasharray="3 4" vector-effect="non-scaling-stroke"/>
+            <line data-timeline-crosshair-line x1="${TIMELINE_LEFT}" y1="${TIMELINE_TOP}" x2="${TIMELINE_LEFT}" y2="${TIMELINE_TOP + TIMELINE_PLOT_HEIGHT}" stroke="rgba(255,255,255,.55)" stroke-width="1" stroke-dasharray="3 4" vector-effect="non-scaling-stroke"/>
             <g data-timeline-markers></g>
           </g>
-          <rect data-timeline-hitbox x="${left}" y="${top}" width="${plotWidth}" height="${plotHeight}" fill="transparent" style="pointer-events:all;cursor:crosshair"/>
+          <rect data-timeline-hitbox x="${TIMELINE_LEFT}" y="${TIMELINE_TOP}" width="${TIMELINE_PLOT_WIDTH}" height="${TIMELINE_PLOT_HEIGHT}" fill="transparent" style="pointer-events:all;cursor:crosshair"/>
         </svg>
       </div>
       <div data-timeline-tooltip role="tooltip" class="pointer-events-none absolute z-20 hidden min-w-52 max-w-64 rounded-lg border border-[var(--color-line-hi)] bg-[var(--color-panel-hi)]/95 px-3 py-2.5 text-[10px] shadow-2xl backdrop-blur"></div>
       <figcaption class="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--color-line)] px-4 py-2.5">
-        <ul class="flex flex-wrap gap-x-4 gap-y-1.5" role="list">${legend}</ul>
+        <ul data-timeline-legend class="flex flex-wrap gap-x-4 gap-y-1.5" role="list">${timelineLegendHTML(model)}</ul>
         <span class="flex shrink-0 items-center gap-3 text-[10px] uppercase tracking-wider text-[var(--color-ink-faint)]">
           <span class="flex items-center gap-1.5"><i class="block w-5 border-t-2 border-current"></i>tokens</span>
           <span class="flex items-center gap-1.5"><i class="block w-5 border-t-2 border-dashed border-current"></i>cost</span>
@@ -729,66 +794,125 @@ export function renderMetricsTimeline(results: SummaryResult[]): string {
     </figure>`;
 }
 
+export function renderMetricsTimeline(results: SummaryResult[]): string {
+  const model = buildTimelineModel(results);
+  if (!model) return timelineEmptyHTML(results);
+  const html = timelineChartHTML(model);
+  // Attach dataset values after parse isn't available for string render — embed via replace.
+  return html.replace(
+    "<figure data-timeline-chart",
+    `<figure data-timeline-chart data-series-keys="${esc(model.keys)}" data-series="${esc(JSON.stringify(model.trackingSeries))}" data-max-time="${model.maxTime}" data-max-tokens="${model.maxTokens}" data-max-cost="${model.maxCost}" data-chart-left="${TIMELINE_LEFT}" data-chart-right="${TIMELINE_RIGHT}" data-chart-top="${TIMELINE_TOP}" data-chart-bottom="${TIMELINE_BOTTOM}"`,
+  );
+}
+
+/** Patch the live chart in place so hover tooltip/crosshair survive streaming updates. */
+export function mountMetricsTimeline(root: HTMLElement, results: SummaryResult[]): void {
+  const model = buildTimelineModel(results);
+  const figure = root.querySelector<HTMLElement>("[data-timeline-chart]");
+
+  if (!model) {
+    if (!root.querySelector("[data-timeline-empty]")) root.innerHTML = timelineEmptyHTML(results);
+    return;
+  }
+
+  if (!figure || figure.dataset.seriesKeys !== model.keys) {
+    root.innerHTML = timelineChartHTML(model);
+    const next = root.querySelector<HTMLElement>("[data-timeline-chart]");
+    if (next) applyTimelineFigureData(next, model);
+    return;
+  }
+
+  applyTimelineFigureData(figure, model);
+  const defs = figure.querySelector("[data-timeline-defs]");
+  const grid = figure.querySelector("[data-timeline-grid]");
+  const plot = figure.querySelector("[data-timeline-plot]");
+  const legend = figure.querySelector("[data-timeline-legend]");
+  const costLabel = figure.querySelector<SVGTextElement>("[data-timeline-cost-label]");
+  if (defs) defs.innerHTML = timelineDefsHTML(model);
+  if (grid) grid.innerHTML = timelineGridHTML(model);
+  if (plot) plot.innerHTML = timelinePlotHTML(model);
+  if (legend) legend.innerHTML = timelineLegendHTML(model);
+  if (costLabel) costLabel.setAttribute("visibility", model.hasKnownCosts ? "visible" : "hidden");
+
+  // Refresh an open tooltip with the new samples at the same x-ratio.
+  if (timelineHover && timelineHover.figure === figure) {
+    paintTimelineAtRatio(
+      figure,
+      timelineHover.ratio,
+      timelineHover.offsetX,
+      timelineHover.offsetY,
+    );
+  }
+}
+
 let timelineTrackingInstalled = false;
-export function installTimelineTracking() {
-  if (timelineTrackingInstalled || typeof document === "undefined") return;
-  timelineTrackingInstalled = true;
-  type TrackingSeries = { label: string; color: string; samples: MetricSample[] };
-  const seriesCache = new WeakMap<HTMLElement, TrackingSeries[]>();
-  const hide = (figure: HTMLElement) => {
-    figure.querySelector<HTMLElement>("[data-timeline-tooltip]")?.classList.add("hidden");
-    figure
-      .querySelector<SVGGElement>("[data-timeline-crosshair]")
-      ?.setAttribute("visibility", "hidden");
-  };
-  document.addEventListener("pointermove", (event) => {
-    if (!(event.target instanceof Element)) return;
-    const hitbox = event.target.closest<SVGRectElement>("[data-timeline-hitbox]");
-    const figure = hitbox?.closest<HTMLElement>("[data-timeline-chart]");
-    if (!hitbox || !figure) return;
-    const rect = hitbox.getBoundingClientRect();
-    const ratio = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
-    const maxTime = Number(figure.dataset.maxTime) || 1;
-    const maxTokens = Number(figure.dataset.maxTokens) || 1;
-    const maxCost = Number(figure.dataset.maxCost) || 1;
-    const left = Number(figure.dataset.chartLeft);
-    const right = Number(figure.dataset.chartRight);
-    const top = Number(figure.dataset.chartTop);
-    const bottom = Number(figure.dataset.chartBottom);
-    const viewBox = hitbox.ownerSVGElement?.viewBox.baseVal;
-    if (!viewBox) return;
-    const plotWidth = viewBox.width - left - right;
-    const plotHeight = viewBox.height - top - bottom;
-    const chartX = left + ratio * plotWidth;
-    const targetTime = ratio * maxTime;
-    let series = seriesCache.get(figure);
-    if (!series) {
-      series = JSON.parse(figure.dataset.series || "[]") as TrackingSeries[];
-      seriesCache.set(figure, series);
-    }
-    const current = series
-      .map((item) => ({
-        ...item,
-        sample: [...item.samples].reverse().find((sample) => sample.tMs <= targetTime),
-      }))
-      .filter((item) => item.sample);
-    if (!current.length) return hide(figure);
-    const crosshair = figure.querySelector<SVGGElement>("[data-timeline-crosshair]");
-    const line = figure.querySelector<SVGLineElement>("[data-timeline-crosshair-line]");
-    const markers = figure.querySelector<SVGGElement>("[data-timeline-markers]");
-    const tooltip = figure.querySelector<HTMLElement>("[data-timeline-tooltip]");
-    if (!crosshair || !line || !markers || !tooltip) return;
-    line.setAttribute("x1", String(chartX));
-    line.setAttribute("x2", String(chartX));
-    markers.innerHTML = current
-      .map(({ color, sample }) => {
-        const tokenY = top + plotHeight - (sample!.completionTokens / maxTokens) * plotHeight;
-        const costY = top + plotHeight - (sample!.cost / maxCost) * plotHeight;
-        return `<circle cx="${chartX}" cy="${tokenY}" r="4" fill="${color}" stroke="#0f0f0f" stroke-width="2"/>${sample!.costKnown ? `<circle cx="${chartX}" cy="${costY}" r="3.5" fill="#0f0f0f" stroke="${color}" stroke-width="2"/>` : ""}`;
-      })
-      .join("");
-    crosshair.setAttribute("visibility", "visible");
-    tooltip.innerHTML = `
+type TimelineTrackingSeries = { label: string; color: string; samples: MetricSample[] };
+let timelineHover: {
+  figure: HTMLElement;
+  ratio: number;
+  offsetX: number;
+  offsetY: number;
+} | null = null;
+
+function hideTimelineHover(figure: HTMLElement) {
+  figure.querySelector<HTMLElement>("[data-timeline-tooltip]")?.classList.add("hidden");
+  figure
+    .querySelector<SVGGElement>("[data-timeline-crosshair]")
+    ?.setAttribute("visibility", "hidden");
+}
+
+function paintTimelineAtRatio(
+  figure: HTMLElement,
+  ratio: number,
+  offsetX: number,
+  offsetY: number,
+): boolean {
+  const maxTime = Number(figure.dataset.maxTime) || 1;
+  const maxTokens = Number(figure.dataset.maxTokens) || 1;
+  const maxCost = Number(figure.dataset.maxCost) || 1;
+  const left = Number(figure.dataset.chartLeft);
+  const right = Number(figure.dataset.chartRight);
+  const top = Number(figure.dataset.chartTop);
+  const bottom = Number(figure.dataset.chartBottom);
+  const plotWidth = TIMELINE_WIDTH - left - right;
+  const plotHeight = TIMELINE_HEIGHT - top - bottom;
+  const chartX = left + ratio * plotWidth;
+  const targetTime = ratio * maxTime;
+
+  let series: TimelineTrackingSeries[];
+  try {
+    series = JSON.parse(figure.dataset.series || "[]") as TimelineTrackingSeries[];
+  } catch {
+    return false;
+  }
+  const current = series
+    .map((item) => ({
+      ...item,
+      sample: [...item.samples].reverse().find((sample) => sample.tMs <= targetTime),
+    }))
+    .filter((item) => item.sample);
+  if (!current.length) {
+    hideTimelineHover(figure);
+    return true;
+  }
+
+  const crosshair = figure.querySelector<SVGGElement>("[data-timeline-crosshair]");
+  const line = figure.querySelector<SVGLineElement>("[data-timeline-crosshair-line]");
+  const markers = figure.querySelector<SVGGElement>("[data-timeline-markers]");
+  const tooltip = figure.querySelector<HTMLElement>("[data-timeline-tooltip]");
+  if (!crosshair || !line || !markers || !tooltip) return false;
+
+  line.setAttribute("x1", String(chartX));
+  line.setAttribute("x2", String(chartX));
+  markers.innerHTML = current
+    .map(({ color, sample }) => {
+      const tokenY = top + plotHeight - (sample!.completionTokens / maxTokens) * plotHeight;
+      const costY = top + plotHeight - (sample!.cost / maxCost) * plotHeight;
+      return `<circle cx="${chartX}" cy="${tokenY}" r="4" fill="${color}" stroke="#0f0f0f" stroke-width="2"/>${sample!.costKnown ? `<circle cx="${chartX}" cy="${costY}" r="3.5" fill="#0f0f0f" stroke="${color}" stroke-width="2"/>` : ""}`;
+    })
+    .join("");
+  crosshair.setAttribute("visibility", "visible");
+  tooltip.innerHTML = `
       <div class="mb-2 font-mono text-[10px] text-[var(--color-ink-faint)]">${fmtDur(targetTime)} after first response</div>
       <div class="space-y-1.5">${current
         .map(
@@ -799,18 +923,41 @@ export function installTimelineTracking() {
             </div>`,
         )
         .join("")}</div>`;
-    tooltip.classList.remove("hidden");
+  tooltip.classList.remove("hidden");
+  const figureRect = figure.getBoundingClientRect();
+  const tooltipWidth = 256;
+  tooltip.style.left = `${Math.min(figureRect.width - tooltipWidth - 8, Math.max(8, offsetX + 12))}px`;
+  tooltip.style.top = `${Math.max(8, offsetY - 26)}px`;
+  return true;
+}
+
+export function installTimelineTracking() {
+  if (timelineTrackingInstalled || typeof document === "undefined") return;
+  timelineTrackingInstalled = true;
+  document.addEventListener("pointermove", (event) => {
+    if (!(event.target instanceof Element)) return;
+    const hitbox = event.target.closest<SVGRectElement>("[data-timeline-hitbox]");
+    const figure = hitbox?.closest<HTMLElement>("[data-timeline-chart]");
+    if (!hitbox || !figure) return;
+    const rect = hitbox.getBoundingClientRect();
+    if (rect.width <= 0) return;
+    const ratio = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
     const figureRect = figure.getBoundingClientRect();
-    const tooltipWidth = 256;
-    const pointerX = event.clientX - figureRect.left;
-    tooltip.style.left = `${Math.min(figureRect.width - tooltipWidth - 8, Math.max(8, pointerX + 12))}px`;
-    tooltip.style.top = `${Math.max(8, event.clientY - figureRect.top - 26)}px`;
+    const offsetX = event.clientX - figureRect.left;
+    const offsetY = event.clientY - figureRect.top;
+    timelineHover = { figure, ratio, offsetX, offsetY };
+    paintTimelineAtRatio(figure, ratio, offsetX, offsetY);
   });
   document.addEventListener("pointerout", (event) => {
     if (!(event.target instanceof Element)) return;
     const hitbox = event.target.closest("[data-timeline-hitbox]");
-    const figure = hitbox?.closest<HTMLElement>("[data-timeline-chart]");
-    if (figure) hide(figure);
+    if (!(hitbox instanceof Element) || !hitbox.isConnected) return;
+    const figure = hitbox.closest<HTMLElement>("[data-timeline-chart]");
+    if (!figure) return;
+    const related = event.relatedTarget;
+    if (related instanceof Node && hitbox.contains(related)) return;
+    if (timelineHover?.figure === figure) timelineHover = null;
+    hideTimelineHover(figure);
   });
 }
 

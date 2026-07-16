@@ -22,7 +22,7 @@ import {
   installScrollSync,
   SCROLLLINK_KEY,
   renderBattleSummary,
-  renderMetricsTimeline,
+  mountMetricsTimeline,
   renderBattleInsights,
   downsampleMetricSamples,
   installMetricTooltips,
@@ -1466,7 +1466,7 @@ function refreshComparison() {
 }
 
 function refreshTimeline(results = summaryEntries()) {
-  els.timeline.innerHTML = renderMetricsTimeline(results);
+  mountMetricsTimeline(els.timeline, results);
   els.insights.innerHTML = renderBattleInsights(results);
 }
 

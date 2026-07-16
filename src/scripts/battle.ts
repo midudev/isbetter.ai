@@ -16,7 +16,7 @@ import {
   installScrollSync,
   modelBadge,
   renderBattleSummary,
-  renderMetricsTimeline,
+  mountMetricsTimeline,
   renderBattleInsights,
   installMetricTooltips,
   installTimelineTracking,
@@ -144,7 +144,7 @@ async function initBattle(b: Battle) {
   function renderSummary() {
     const summary = summaryResults();
     $("#battle-summary-list").innerHTML = renderBattleSummary(summary);
-    $("#battle-timeline").innerHTML = renderMetricsTimeline(summary);
+    mountMetricsTimeline($("#battle-timeline"), summary);
     $("#battle-insights").innerHTML = renderBattleInsights(summary);
   }
 

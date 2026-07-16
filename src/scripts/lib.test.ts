@@ -262,6 +262,9 @@ describe("metric timelines", () => {
     expect(html).toContain("<path");
     expect(html).toContain('stroke-dasharray="7 6"');
     expect(html).toContain("&quot;tMs&quot;:0");
+    expect(html).toContain('data-timeline-plot');
+    expect(html).toContain('data-timeline-tooltip');
+    expect(html).toContain('data-timeline-hitbox');
   });
 
   it("keeps tokens visible when cost history is unavailable", () => {
