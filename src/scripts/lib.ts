@@ -297,7 +297,7 @@ function scrollBridge(id: string): string {
 
 // Stops ordinary links and submissions from replacing the preview with a
 // phishing page. The sandbox remains the primary boundary for scripted escape.
-const PREVIEW_NAVIGATION_GUARD = `<script>(function(){function blockedLink(target){var link=target&&target.closest&&target.closest("a[href]");if(!link)return false;link.removeAttribute("ping");var href=(link.getAttribute("href")||"").trim();return /^(?:https?:|\\/\\/|mailto:|javascript:)/i.test(href)}addEventListener("click",function(event){if(blockedLink(event.target))event.preventDefault()},true);addEventListener("auxclick",function(event){if(blockedLink(event.target))event.preventDefault()},true);addEventListener("submit",function(event){event.preventDefault()},true)})()</scr`+`ipt>`;
+const PREVIEW_NAVIGATION_GUARD = `<script>(function(){function blockedLink(target){var link=target&&target.closest&&target.closest("a[href]");if(!link)return false;link.removeAttribute("ping");var href=(link.getAttribute("href")||"").trim();return href!==""&&href.charAt(0)!=="#"}addEventListener("click",function(event){if(blockedLink(event.target))event.preventDefault()},true);addEventListener("auxclick",function(event){if(blockedLink(event.target))event.preventDefault()},true);addEventListener("submit",function(event){event.preventDefault()},true)})()</scr`+`ipt>`;
 
 /** Strip navigation gadgets that can leave the srcdoc document before CSP helps. */
 function stripPreviewNavigationGadgets(code: string): string {
@@ -318,25 +318,19 @@ export function hardenPreviewDocument(
   code: string,
   options: { bridgeId?: string } = {},
 ): string {
-  let doc = stripPreviewNavigationGadgets(code);
+  const untrusted = stripPreviewNavigationGadgets(code);
   const cspMeta = `<meta http-equiv="Content-Security-Policy" content="${PREVIEW_CSP}">`;
   const securityBootstrap = `${cspMeta}${PREVIEW_NAVIGATION_GUARD}`;
-
-  if (/<head\b[^>]*>/i.test(doc)) {
-    doc = doc.replace(/<head\b[^>]*>/i, (match) => `${match}${securityBootstrap}`);
-  } else if (/<html\b[^>]*>/i.test(doc)) {
-    doc = doc.replace(
-      /<html\b[^>]*>/i,
-      (match) => `${match}<head>${securityBootstrap}</head>`,
-    );
-  } else if (/<!doctype html>/i.test(doc)) {
-    doc = doc.replace(
-      /<!doctype html>/i,
-      (match) => `${match}<head>${securityBootstrap}</head>`,
-    );
-  } else {
-    doc = `<!DOCTYPE html><html><head>${securityBootstrap}</head><body>${doc}</body></html>`;
-  }
+  const withoutDoctype = untrusted.replace(/<!doctype\b[^>]*>/gi, "");
+  const htmlAttrs = withoutDoctype.match(/<html\b([^>]*)>/i)?.[1] || "";
+  const completeDocument = withoutDoctype.match(
+    /<head\b[^>]*>([\s\S]*?)<\/head>[\s\S]*?<body\b([^>]*)>([\s\S]*?)<\/body>/i,
+  );
+  // Rebuild complete documents so no attacker-controlled bytes can execute
+  // before the CSP meta. Fragments are nested inside a fresh, protected body.
+  let doc = completeDocument
+    ? `<!DOCTYPE html><html${htmlAttrs}><head>${securityBootstrap}${completeDocument[1]}</head><body${completeDocument[2]}>${completeDocument[3]}</body></html>`
+    : `<!DOCTYPE html><html${htmlAttrs}><head>${securityBootstrap}</head><body>${withoutDoctype}</body></html>`;
 
   if (options.bridgeId) {
     const bridge = scrollBridge(options.bridgeId);

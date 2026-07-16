@@ -75,6 +75,7 @@ describe("preview hardening", () => {
     expect(hardened).not.toMatch(/http-equiv\s*=\s*["']?refresh/i);
     expect(hardened).not.toMatch(/<link\b[^>]*\b(?:dns-prefetch|preconnect)\b/i);
     expect(hardened).toContain("blockedLink");
+    expect(hardened).toContain('href.charAt(0)!=="#"');
     expect(hardened.indexOf("Content-Security-Policy")).toBeLessThan(
       hardened.indexOf("fetch("),
     );
@@ -86,6 +87,18 @@ describe("preview hardening", () => {
     expect(hardened).toMatch(/^<!DOCTYPE html>/i);
     expect(hardened).toContain(`content="${PREVIEW_CSP}"`);
     expect(hardened).toContain("<h1>Hi</h1>");
+  });
+
+  it("places CSP before attacker-controlled bytes and preserves complete documents", () => {
+    const hardened = hardenPreviewDocument(
+      `<script>fetch("https://evil.test/early")</script><!doctype html><html lang="en"><head><style>body{color:red}</style></head><body class="demo"><main>Safe</main></body></html>`,
+    );
+
+    expect(hardened).not.toContain("evil.test/early");
+    expect(hardened).toContain('<html lang="en">');
+    expect(hardened).toContain("<style>body{color:red}</style>");
+    expect(hardened).toContain('<body class="demo">');
+    expect(hardened).toContain("<main>Safe</main>");
   });
 
   it("renders previews in a scripts-only sandboxed iframe", () => {
