@@ -10,6 +10,7 @@ ignoredOptionalDependencies:
 overrides:
   'miniflare>sharp': '-'
 minimumReleaseAge: 1440
+trustLockfile: true
 minimumReleaseAgeExclude:
   - '@tailwindcss/node@4.3.2'
   - '@tailwindcss/oxide-android-arm64@4.3.2'
