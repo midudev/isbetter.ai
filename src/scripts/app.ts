@@ -1055,7 +1055,7 @@ function contentHTML(entry: Entry): string {
   return `
     <div class="relative h-full">
       ${content}
-      <div data-waiting-overlay role="status" aria-live="polite" class="absolute inset-0 z-20 grid place-items-center bg-[var(--color-surface)]/95 p-6 text-center backdrop-blur-sm">
+      <div data-waiting-overlay role="status" aria-live="polite" class="absolute inset-0 z-20 grid place-items-center bg-[color-mix(in_srgb,var(--color-surface)_48%,transparent)] p-6 text-center backdrop-blur-[2px]">
         <button data-action="dismiss-waiting" data-model="${esc(entry.key)}" aria-label="Close waiting screen and view output" class="absolute right-3 top-3 grid size-8 place-items-center rounded-lg border border-[var(--color-line)] text-[var(--color-ink-faint)] transition-colors hover:border-[var(--color-line-hi)] hover:bg-[var(--color-panel-hi)] hover:text-[var(--color-ink)]" title="view output">
           ${svg("i-x", "size-4")}
         </button>
@@ -1064,8 +1064,8 @@ function contentHTML(entry: Entry): string {
             ${svg("i-check", "size-6")}
           </span>
           <p class="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--color-accent)]">Model finished</p>
-          <p class="mt-2 text-xl font-semibold text-[var(--color-ink)]">Completed in ${fmtDur(entry.durationMs)}</p>
-          <p data-waiting-message class="mt-3 text-[12px] leading-relaxed text-[var(--color-ink-dim)]">Waiting for ${pendingPeers} other model${pendingPeers === 1 ? "" : "s"} to finish…</p>
+          <p class="mt-2 text-xl font-semibold text-[var(--color-ink)] [text-shadow:0_1px_12px_rgba(0,0,0,.55)]">Completed in ${fmtDur(entry.durationMs)}</p>
+          <p data-waiting-message class="mt-3 text-[12px] leading-relaxed text-[var(--color-ink-dim)] [text-shadow:0_1px_10px_rgba(0,0,0,.45)]">Waiting for ${pendingPeers} other model${pendingPeers === 1 ? "" : "s"} to finish…</p>
           <p class="mt-1 text-[10px] text-[var(--color-ink-faint)]">Close this screen to view the output.</p>
         </div>
       </div>
