@@ -131,7 +131,7 @@ export function installMetricTooltips() {
   tooltip.role = "tooltip";
   tooltip.hidden = true;
   tooltip.className =
-    "pointer-events-none fixed z-[100] max-w-[17rem] rounded-lg border border-[var(--color-line-hi)] bg-[var(--color-panel-hi)] px-3 py-2 text-[11px] leading-relaxed text-[var(--color-ink)] shadow-2xl";
+    "pointer-events-none fixed z-[100] max-w-[20rem] rounded-lg border border-[var(--color-line-hi)] bg-[var(--color-panel-hi)] px-3 py-2 text-[11px] leading-relaxed text-[var(--color-ink)] shadow-2xl";
   document.body.append(tooltip);
 
   let active: HTMLElement | null = null;
@@ -140,7 +140,7 @@ export function installMetricTooltips() {
     active = null;
   };
   const show = (target: HTMLElement) => {
-    const text = target.dataset.metricTooltip;
+    const text = target.dataset.metricTooltip || target.dataset.tip;
     if (!text) return;
     active = target;
     tooltip.textContent = text;
@@ -158,7 +158,7 @@ export function installMetricTooltips() {
   };
   const targetOf = (event: Event) =>
     event.target instanceof Element
-      ? event.target.closest<HTMLElement>("[data-metric-tooltip]")
+      ? event.target.closest<HTMLElement>("[data-metric-tooltip], [data-tip]")
       : null;
 
   document.addEventListener("pointerover", (event) => {
@@ -245,10 +245,82 @@ function numberedCodeHTML(highlighted: string): string {
     .join("")}</div>`;
 }
 
+/* ------------------------ untrusted preview hardening --------------------- */
+// Interactive demos must run JS, but public HTML is untrusted. We keep them
+// useful (inline scripts/styles, data: assets) while blocking network I/O,
+// form exfil, nested frames, and escaping the preview chrome.
+export const PREVIEW_CSP = [
+  "default-src 'none'",
+  "script-src 'unsafe-inline'",
+  "style-src 'unsafe-inline'",
+  "img-src data: blob:",
+  "font-src data:",
+  "media-src data: blob:",
+  "connect-src 'none'",
+  "form-action 'none'",
+  "frame-src 'none'",
+  "child-src 'none'",
+  "object-src 'none'",
+  "base-uri 'none'",
+  "worker-src 'none'",
+].join("; ");
+
+/** Tightest sandbox that still allows interactive demos. No same-origin, popups, forms, or modals. */
+export const PREVIEW_SANDBOX = "allow-scripts";
+
 // Tiny bridge injected into a preview so scroll-link can drive it via postMessage
 // (the iframe is sandboxed without same-origin, so we can't touch it directly).
 function scrollBridge(id: string): string {
   return `<script>(function(){var ID=${JSON.stringify(id)},lock=false;function engage(){lock=false;parent.postMessage({__ab:"engage",id:ID},"*")}["wheel","touchstart","pointerdown","keydown"].forEach(function(type){addEventListener(type,engage,{passive:true})});addEventListener("scroll",function(){if(lock)return;var h=document.documentElement.scrollHeight-innerHeight;parent.postMessage({__ab:"scroll",id:ID,ratio:h>0?scrollY/h:0},"*")},{passive:true});addEventListener("message",function(e){var d=e.data;if(d&&d.__ab==="set"&&d.id!==ID){lock=true;var root=document.documentElement,behavior=root.style.scrollBehavior,h=root.scrollHeight-innerHeight;root.style.scrollBehavior="auto";scrollTo(0,(d.ratio||0)*h);requestAnimationFrame(function(){root.style.scrollBehavior=behavior});setTimeout(function(){lock=false},120)}})})()</scr`+`ipt>`;
+}
+
+/** Strip navigation gadgets that can leave the srcdoc document before CSP helps. */
+function stripPreviewNavigationGadgets(code: string): string {
+  return code
+    .replace(/<base\b[^>]*>/gi, "")
+    .replace(/<meta\b[^>]*http-equiv\s*=\s*(["']?)refresh\1[^>]*>/gi, "");
+}
+
+/**
+ * Prepare untrusted HTML for preview: strip navigation gadgets, force a strict
+ * CSP, and optionally inject the scroll-sync bridge.
+ */
+export function hardenPreviewDocument(
+  code: string,
+  options: { bridgeId?: string } = {},
+): string {
+  let doc = stripPreviewNavigationGadgets(code);
+  const cspMeta = `<meta http-equiv="Content-Security-Policy" content="${PREVIEW_CSP}">`;
+
+  if (/<head\b[^>]*>/i.test(doc)) {
+    doc = doc.replace(/<head\b[^>]*>/i, (match) => `${match}${cspMeta}`);
+  } else if (/<html\b[^>]*>/i.test(doc)) {
+    doc = doc.replace(/<html\b[^>]*>/i, (match) => `${match}<head>${cspMeta}</head>`);
+  } else if (/<!doctype html>/i.test(doc)) {
+    doc = doc.replace(/<!doctype html>/i, (match) => `${match}<head>${cspMeta}</head>`);
+  } else {
+    doc = `<!DOCTYPE html><html><head>${cspMeta}</head><body>${doc}</body></html>`;
+  }
+
+  if (options.bridgeId) {
+    const bridge = scrollBridge(options.bridgeId);
+    doc = doc.includes("</body>")
+      ? doc.replace("</body>", `${bridge}</body>`)
+      : `${doc}${bridge}`;
+  }
+  return doc;
+}
+
+/**
+ * Open untrusted HTML in a new tab without giving it a free top-level page.
+ * The blob wrapper is ours; the demo runs inside a nested sandboxed iframe.
+ */
+export function openHardenedPreview(code: string, title = "AI Battle preview"): void {
+  const inner = hardenPreviewDocument(code);
+  const wrapper = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title><style>html,body{margin:0;height:100%;background:#0a0a0a}iframe{display:block;width:100%;height:100%;border:0;background:#fff}</style></head><body><iframe sandbox="${PREVIEW_SANDBOX}" referrerpolicy="no-referrer" srcdoc="${esc(inner)}" title="${esc(title)}"></iframe></body></html>`;
+  const url = URL.createObjectURL(new Blob([wrapper], { type: "text/html" }));
+  window.open(url, "_blank", "noopener,noreferrer");
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
 // Content for a finished result (output / code / preview).
@@ -256,16 +328,13 @@ export function doneContentHTML(r: ResultView, viewMode: ViewMode): string {
   const resultKey = r.key || r.id;
   if (viewMode === "preview") {
     if (!r.code) return placeholderHTML("i-browser", "no renderable HTML in this answer");
-    const bridge = scrollBridge(resultKey);
-    const doc = r.code.includes("</body>")
-      ? r.code.replace("</body>", `${bridge}</body>`)
-      : r.code + bridge;
+    const doc = hardenPreviewDocument(r.code, { bridgeId: resultKey });
     return `
       <div class="relative h-full bg-[var(--color-panel)] p-1.5">
         <button data-action="reload-preview" data-model="${esc(resultKey)}" aria-label="Restart preview" class="absolute right-2 top-2 z-10 flex items-center gap-1 rounded-md border border-[var(--color-line)] bg-[var(--color-panel)]/90 px-2 py-1 text-[10px] text-[var(--color-ink-dim)] backdrop-blur transition-colors hover:text-[var(--color-ink)]" title="restart the demo">
           ${svg("i-refresh", "size-3.5")}<span>restart</span>
         </button>
-        <iframe data-preview="${esc(resultKey)}" class="h-full w-full rounded-lg bg-white shadow-inner" sandbox="allow-scripts allow-modals allow-forms" srcdoc="${esc(doc)}" title="Preview generated by ${esc(r.id)}"></iframe>
+        <iframe data-preview="${esc(resultKey)}" class="h-full w-full rounded-lg bg-white shadow-inner" sandbox="${PREVIEW_SANDBOX}" referrerpolicy="no-referrer" srcdoc="${esc(doc)}" title="Preview generated by ${esc(r.id)}"></iframe>
       </div>`;
   }
   if (viewMode === "code") {
@@ -682,7 +751,7 @@ export function renderBattleInsights(results: SummaryResult[]): string {
     </div>`;
   return `
     <div class="p-4">
-      <div class="mb-3 text-[10px] uppercase tracking-[0.16em] text-[var(--color-ink-faint)]">Battle at a glance</div>
+      <div class="mb-3 font-pixel text-[10px] uppercase tracking-[0.12em] text-[var(--color-ink-faint)]">Battle at a glance</div>
       <div class="grid grid-cols-2 gap-2">
         ${insight("i-clock", "wall time", fmtDur(wallTime), "text-sky-400")}
         ${insight("i-up", "output", fmtInt(totalTokens), "text-emerald-400")}

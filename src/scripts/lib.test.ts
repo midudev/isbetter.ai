@@ -5,7 +5,11 @@ import {
   hasIncompleteCodeFence,
   HISTORY_KEY,
   downsampleMetricSamples,
+  doneContentHTML,
+  hardenPreviewDocument,
   loadHistory,
+  PREVIEW_CSP,
+  PREVIEW_SANDBOX,
   renderBattleInsights,
   renderMetricsTimeline,
   saveHistory,
@@ -53,6 +57,48 @@ describe("result extraction", () => {
     expect(extractCode(truncated)).toBe("<!doctype html><html><body>partial");
     expect(hasIncompleteCodeFence(truncated)).toBe(true);
     expect(hasIncompleteCodeFence(response)).toBe(false);
+  });
+});
+
+describe("preview hardening", () => {
+  it("injects a strict CSP and strips navigation gadgets", () => {
+    const hardened = hardenPreviewDocument(
+      `<!doctype html><html><head><base href="https://evil.test/"><meta http-equiv="refresh" content="0;url=https://evil.test"></head><body><img src="https://evil.test/t.gif"><script>fetch("https://evil.test")</script></body></html>`,
+      { bridgeId: "model-a" },
+    );
+
+    expect(hardened).toContain(`content="${PREVIEW_CSP}"`);
+    expect(hardened).toContain("connect-src 'none'");
+    expect(hardened).not.toMatch(/<base\b/i);
+    expect(hardened).not.toMatch(/http-equiv\s*=\s*["']?refresh/i);
+    expect(hardened).toContain("__ab");
+  });
+
+  it("wraps fragment HTML so CSP still applies", () => {
+    const hardened = hardenPreviewDocument(`<h1>Hi</h1><script>alert(1)</script>`);
+    expect(hardened).toMatch(/^<!DOCTYPE html>/i);
+    expect(hardened).toContain(`content="${PREVIEW_CSP}"`);
+    expect(hardened).toContain("<h1>Hi</h1>");
+  });
+
+  it("renders previews in a scripts-only sandboxed iframe", () => {
+    const html = doneContentHTML(
+      {
+        id: "gpt",
+        key: "openai::gpt",
+        raw: "",
+        code: "<!doctype html><html><body>hi</body></html>",
+        codeHtml: "",
+      },
+      "preview",
+    );
+
+    expect(html).toContain(`sandbox="${PREVIEW_SANDBOX}"`);
+    expect(html).toContain('referrerpolicy="no-referrer"');
+    expect(html).not.toContain("allow-same-origin");
+    expect(html).not.toContain("allow-modals");
+    expect(html).not.toContain("allow-forms");
+    expect(html).toContain("Content-Security-Policy");
   });
 });
 
