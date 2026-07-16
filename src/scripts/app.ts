@@ -1641,7 +1641,7 @@ els.results.addEventListener("click", async (e) => {
     await callModel(entry);
     computeBests();
   } else if (action === "open" && entry.code) {
-    openHardenedPreview(entry.code, `Preview · ${entry.label || entry.id}`);
+    openHardenedPreview(entry.code, `Preview · ${displayName(entry.key)}`);
   }
 });
 
