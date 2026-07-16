@@ -2,8 +2,13 @@ packages:
   - '.'
 allowBuilds:
   esbuild: true
-  sharp: true
   workerd: true
+# Astro lists sharp as optional for image transforms; we use passthrough.
+ignoredOptionalDependencies:
+  - sharp
+# miniflare pulls sharp for local Cloudflare Images simulation — unused here.
+overrides:
+  'miniflare>sharp': '-'
 minimumReleaseAge: 1440
 minimumReleaseAgeExclude:
   - '@tailwindcss/node@4.3.2'

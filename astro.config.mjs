@@ -1,5 +1,5 @@
 // @ts-check
-import { defineConfig } from 'astro/config';
+import { defineConfig, passthroughImageService } from 'astro/config';
 import cloudflare from '@astrojs/cloudflare';
 
 import tailwindcss from '@tailwindcss/vite';
@@ -7,7 +7,11 @@ import tailwindcss from '@tailwindcss/vite';
 // https://astro.build/config
 export default defineConfig({
   site: 'https://isbetter.ai',
-  adapter: cloudflare(),
+  adapter: cloudflare({ imageService: 'passthrough' }),
+  // No astro:assets transforms — skip sharp entirely.
+  image: {
+    service: passthroughImageService(),
+  },
   // CSP is delivered via public/_headers (HTTP), not Astro's meta CSP.
   // srcdoc/blob preview iframes inherit the parent policy; hashed script/style
   // sources would block the demos' required inline JS/CSS. Preview documents
