@@ -4,6 +4,12 @@ import {
   parseSharedBattleData,
   type SharedBattle,
 } from "../scripts/shared-battle";
+import {
+  PUBLISH_RATE_LIMIT,
+  clientIp,
+  consumeRateLimit,
+  type RateLimitStore,
+} from "./rate-limit";
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -33,9 +39,25 @@ function byteLength(value: string): number {
   return new TextEncoder().encode(value).byteLength;
 }
 
+function rateLimitHeaders(result: {
+  limit: number;
+  remaining: number;
+  reset: number;
+  retryAfterSec: number;
+}): HeadersInit {
+  return {
+    "cache-control": "no-store",
+    "ratelimit-limit": String(result.limit),
+    "ratelimit-remaining": String(result.remaining),
+    "ratelimit-reset": String(result.reset),
+    "retry-after": String(result.retryAfterSec),
+  };
+}
+
 export async function createSharedBattle(
   request: Request,
   database: BattlesDatabase,
+  rateLimitKv?: RateLimitStore | null,
 ): Promise<Response> {
   if (!request.headers.get("content-type")?.toLowerCase().includes("application/json"))
     return json({ error: "Expected application/json" }, { status: 415 });
@@ -43,6 +65,36 @@ export async function createSharedBattle(
   const declaredLength = Number(request.headers.get("content-length") || 0);
   if (declaredLength > MAX_SHARED_BATTLE_BYTES)
     return json({ error: "Battle payload is too large" }, { status: 413 });
+
+  let rate:
+    | Awaited<ReturnType<typeof consumeRateLimit>>
+    | undefined;
+  if (rateLimitKv) {
+    try {
+      rate = await consumeRateLimit(
+        rateLimitKv,
+        clientIp(request),
+        PUBLISH_RATE_LIMIT,
+      );
+    } catch {
+      // Fail closed: without rate limiting, anonymous publish is too easy to abuse.
+      return json(
+        { error: "Publish temporarily unavailable. Try again shortly." },
+        { status: 503, headers: { "cache-control": "no-store" } },
+      );
+    }
+    if (rate && !rate.ok) {
+      return json(
+        {
+          error: `Rate limit exceeded. Try again in ${rate.retryAfterSec}s.`,
+        },
+        {
+          status: 429,
+          headers: rateLimitHeaders(rate),
+        },
+      );
+    }
+  }
 
   const body = await request.text();
   if (byteLength(body) > MAX_SHARED_BATTLE_BYTES)
@@ -86,7 +138,16 @@ export async function createSharedBattle(
     { id, url: publicUrl.toString() },
     {
       status: 201,
-      headers: { "cache-control": "no-store" },
+      headers: {
+        "cache-control": "no-store",
+        ...(rate
+          ? {
+              "ratelimit-limit": String(rate.limit),
+              "ratelimit-remaining": String(rate.remaining),
+              "ratelimit-reset": String(rate.reset),
+            }
+          : {}),
+      },
     },
   );
 }
