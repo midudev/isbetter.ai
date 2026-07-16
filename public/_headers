@@ -3,4 +3,4 @@
   Referrer-Policy: strict-origin-when-cross-origin
   X-Frame-Options: SAMEORIGIN
   Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()
-  Content-Security-Policy: frame-ancestors 'self'
+  Content-Security-Policy: base-uri 'none'; frame-ancestors 'self'; frame-src 'self' blob:; object-src 'none'
