@@ -6,6 +6,8 @@ import {
   HISTORY_KEY,
   downsampleMetricSamples,
   doneContentHTML,
+  estOutputTokens,
+  estTokens,
   hardenPreviewDocument,
   loadHistory,
   PREVIEW_ALLOW,
@@ -37,6 +39,20 @@ beforeEach(() => {
   Object.defineProperty(globalThis, "localStorage", {
     value: memoryStorage(),
     configurable: true,
+  });
+});
+
+describe("token estimation", () => {
+  it("counts thinking and answer text toward output tokens", () => {
+    const reasoning = "a".repeat(40);
+    const content = "b".repeat(40);
+    expect(estOutputTokens(reasoning, content)).toBe(estTokens(reasoning + content));
+    expect(estOutputTokens(reasoning, content)).toBeGreaterThan(estTokens(content));
+  });
+
+  it("treats thinking-only streams as non-zero output", () => {
+    expect(estOutputTokens("thinking hard about the answer", "")).toBeGreaterThan(0);
+    expect(estOutputTokens("", "")).toBe(0);
   });
 });
 

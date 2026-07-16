@@ -9,6 +9,7 @@ import {
   fmtDur,
   fmtCost,
   estTokens,
+  estOutputTokens,
   extractCode,
   hasIncompleteCodeFence,
   statsRowHTML,
@@ -944,8 +945,8 @@ document.addEventListener("keydown", (event) => {
 function statsRow(entry: Entry, best: Record<string, boolean> = {}) {
   if (entry.state !== "done" && entry.state !== "streaming") return "";
   if (entry.state === "streaming") {
-    // No API token counts yet — estimate from the streamed text length.
-    const out = estTokens(entry.raw);
+    // No API token counts yet — estimate from streamed thinking + answer text.
+    const out = estOutputTokens(entry.reasoning, entry.raw);
     const now = performance.now();
     const total = now - entry.startedAt;
     const gen = entry.firstTokenAt != null ? now - entry.firstTokenAt : 0;
@@ -1171,7 +1172,9 @@ function recordMetricSample(entry: Entry, final = false) {
     }));
     last = entry.metrics.at(-1);
   }
-  const completionTokens = final ? entry.completionTokens : estTokens(entry.raw);
+  const completionTokens = final
+    ? entry.completionTokens
+    : estOutputTokens(entry.reasoning, entry.raw);
   const calculatedCost = final
     ? entry.costKnown
       ? entry.cost
@@ -1368,7 +1371,8 @@ async function callModel(entry: Entry) {
       typeof usage.completion_tokens !== "number" || typeof usage.prompt_tokens !== "number";
     // The API's completion_tokens already includes reasoning; our fallback
     // estimate must add it too so throughput isn't understated.
-    entry.completionTokens = usage.completion_tokens ?? estTokens(entry.reasoning + entry.raw);
+    entry.completionTokens =
+      usage.completion_tokens ?? estOutputTokens(entry.reasoning, entry.raw);
     entry.promptTokens = usage.prompt_tokens ?? entry.promptTokens;
     entry.totalTokens =
       usage.total_tokens ?? entry.promptTokens + entry.completionTokens;
@@ -1399,7 +1403,7 @@ async function callModel(entry: Entry) {
     entry.ttftMs =
       entry.firstTokenAt != null ? entry.firstTokenAt - entry.startedAt : entry.durationMs;
     entry.state = "error";
-    entry.completionTokens = estTokens(entry.raw);
+    entry.completionTokens = estOutputTokens(entry.reasoning, entry.raw);
     entry.totalTokens = entry.promptTokens + entry.completionTokens;
     const calculatedCost = costFor(entry, entry.promptTokens, entry.completionTokens);
     entry.costKnown = calculatedCost !== null;

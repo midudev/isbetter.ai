@@ -44,6 +44,10 @@ export const fmtCost = (v: number, known = true) => {
 export const fmtRate = (n: number) => (n >= 1 ? `${Math.round(n)}` : n.toFixed(1));
 export const estTokens = (s: string) => (s ? Math.max(1, Math.round(s.length / 4)) : 0);
 
+/** Output tokens for throughput/cost: thinking + visible text. */
+export const estOutputTokens = (reasoning: string, content: string) =>
+  estTokens(`${reasoning}${content}`);
+
 /* ----------------------------- code handling ----------------------------- */
 export function extractCode(text: string): string {
   const blocks = [...text.matchAll(/```[\w+-]*[^\S\r\n]*\r?\n?([\s\S]*?)(?:```|$)/g)].map(
