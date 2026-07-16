@@ -790,13 +790,6 @@ els.revealBtn.addEventListener("click", () => {
   }
   refreshBlindUI();
   rerenderIdentities();
-  els.status.textContent = revealed
-    ? "Model identities revealed"
-    : "Model identities hidden again";
-  els.status.classList.remove("hidden");
-  setTimeout(() => {
-    if (!running) els.status.classList.add("hidden");
-  }, 2200);
 });
 
 /* ===================================================================== */
