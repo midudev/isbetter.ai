@@ -263,10 +263,31 @@ export const PREVIEW_CSP = [
   "object-src 'none'",
   "base-uri 'none'",
   "worker-src 'none'",
+  "manifest-src 'none'",
 ].join("; ");
 
 /** Tightest sandbox that still allows interactive demos. No same-origin, popups, forms, or modals. */
 export const PREVIEW_SANDBOX = "allow-scripts";
+
+/** Deny browser/device capabilities that interactive demos do not need. */
+export const PREVIEW_ALLOW = [
+  "accelerometer 'none'",
+  "autoplay 'none'",
+  "camera 'none'",
+  "clipboard-read 'none'",
+  "clipboard-write 'none'",
+  "display-capture 'none'",
+  "fullscreen 'none'",
+  "geolocation 'none'",
+  "gyroscope 'none'",
+  "magnetometer 'none'",
+  "microphone 'none'",
+  "payment 'none'",
+  "publickey-credentials-get 'none'",
+  "usb 'none'",
+  "web-share 'none'",
+  "xr-spatial-tracking 'none'",
+].join("; ");
 
 // Tiny bridge injected into a preview so scroll-link can drive it via postMessage
 // (the iframe is sandboxed without same-origin, so we can't touch it directly).
@@ -274,11 +295,19 @@ function scrollBridge(id: string): string {
   return `<script>(function(){var ID=${JSON.stringify(id)},lock=false;function engage(){lock=false;parent.postMessage({__ab:"engage",id:ID},"*")}["wheel","touchstart","pointerdown","keydown"].forEach(function(type){addEventListener(type,engage,{passive:true})});addEventListener("scroll",function(){if(lock)return;var h=document.documentElement.scrollHeight-innerHeight;parent.postMessage({__ab:"scroll",id:ID,ratio:h>0?scrollY/h:0},"*")},{passive:true});addEventListener("message",function(e){var d=e.data;if(d&&d.__ab==="set"&&d.id!==ID){lock=true;var root=document.documentElement,behavior=root.style.scrollBehavior,h=root.scrollHeight-innerHeight;root.style.scrollBehavior="auto";scrollTo(0,(d.ratio||0)*h);requestAnimationFrame(function(){root.style.scrollBehavior=behavior});setTimeout(function(){lock=false},120)}})})()</scr`+`ipt>`;
 }
 
+// Stops ordinary links and submissions from replacing the preview with a
+// phishing page. The sandbox remains the primary boundary for scripted escape.
+const PREVIEW_NAVIGATION_GUARD = `<script>(function(){function blockedLink(target){var link=target&&target.closest&&target.closest("a[href]");if(!link)return false;link.removeAttribute("ping");var href=(link.getAttribute("href")||"").trim();return /^(?:https?:|\\/\\/|mailto:|javascript:)/i.test(href)}addEventListener("click",function(event){if(blockedLink(event.target))event.preventDefault()},true);addEventListener("auxclick",function(event){if(blockedLink(event.target))event.preventDefault()},true);addEventListener("submit",function(event){event.preventDefault()},true)})()</scr`+`ipt>`;
+
 /** Strip navigation gadgets that can leave the srcdoc document before CSP helps. */
 function stripPreviewNavigationGadgets(code: string): string {
   return code
     .replace(/<base\b[^>]*>/gi, "")
-    .replace(/<meta\b[^>]*http-equiv\s*=\s*(["']?)refresh\1[^>]*>/gi, "");
+    .replace(/<meta\b[^>]*http-equiv\s*=\s*(["']?)refresh\1[^>]*>/gi, "")
+    .replace(
+      /<link\b(?=[^>]*\brel\s*=\s*(?:"[^"]*\b(?:preconnect|dns-prefetch|prefetch|prerender|modulepreload)\b[^"]*"|'[^']*\b(?:preconnect|dns-prefetch|prefetch|prerender|modulepreload)\b[^']*'|[^\s>]*(?:preconnect|dns-prefetch|prefetch|prerender|modulepreload)[^\s>]*))[^>]*>/gi,
+      "",
+    );
 }
 
 /**
@@ -291,15 +320,22 @@ export function hardenPreviewDocument(
 ): string {
   let doc = stripPreviewNavigationGadgets(code);
   const cspMeta = `<meta http-equiv="Content-Security-Policy" content="${PREVIEW_CSP}">`;
+  const securityBootstrap = `${cspMeta}${PREVIEW_NAVIGATION_GUARD}`;
 
   if (/<head\b[^>]*>/i.test(doc)) {
-    doc = doc.replace(/<head\b[^>]*>/i, (match) => `${match}${cspMeta}`);
+    doc = doc.replace(/<head\b[^>]*>/i, (match) => `${match}${securityBootstrap}`);
   } else if (/<html\b[^>]*>/i.test(doc)) {
-    doc = doc.replace(/<html\b[^>]*>/i, (match) => `${match}<head>${cspMeta}</head>`);
+    doc = doc.replace(
+      /<html\b[^>]*>/i,
+      (match) => `${match}<head>${securityBootstrap}</head>`,
+    );
   } else if (/<!doctype html>/i.test(doc)) {
-    doc = doc.replace(/<!doctype html>/i, (match) => `${match}<head>${cspMeta}</head>`);
+    doc = doc.replace(
+      /<!doctype html>/i,
+      (match) => `${match}<head>${securityBootstrap}</head>`,
+    );
   } else {
-    doc = `<!DOCTYPE html><html><head>${cspMeta}</head><body>${doc}</body></html>`;
+    doc = `<!DOCTYPE html><html><head>${securityBootstrap}</head><body>${doc}</body></html>`;
   }
 
   if (options.bridgeId) {
@@ -317,25 +353,46 @@ export function hardenPreviewDocument(
  */
 export function openHardenedPreview(code: string, title = "AI Battle preview"): void {
   const inner = hardenPreviewDocument(code);
-  const wrapper = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title><style>html,body{margin:0;height:100%;background:#0a0a0a}iframe{display:block;width:100%;height:100%;border:0;background:#fff}</style></head><body><iframe sandbox="${PREVIEW_SANDBOX}" referrerpolicy="no-referrer" srcdoc="${esc(inner)}" title="${esc(title)}"></iframe></body></html>`;
+  const wrapper = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title><style>html,body{margin:0;height:100%;background:#0a0a0a}iframe{display:block;width:100%;height:100%;border:0;background:#fff}</style></head><body><iframe sandbox="${PREVIEW_SANDBOX}" allow="${PREVIEW_ALLOW}" referrerpolicy="no-referrer" srcdoc="${esc(inner)}" title="${esc(title)}"></iframe></body></html>`;
   const url = URL.createObjectURL(new Blob([wrapper], { type: "text/html" }));
   window.open(url, "_blank", "noopener,noreferrer");
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
+function previewIframeHTML(r: ResultView, resultKey: string): string {
+  const doc = hardenPreviewDocument(r.code, { bridgeId: resultKey });
+  return `
+    <div class="relative h-full bg-[var(--color-panel)] p-1.5">
+      <button data-action="reload-preview" data-model="${esc(resultKey)}" aria-label="Restart preview" class="absolute right-2 top-2 z-10 flex items-center gap-1 rounded-md border border-[var(--color-line)] bg-[var(--color-panel)]/90 px-2 py-1 text-[10px] text-[var(--color-ink-dim)] backdrop-blur transition-colors hover:text-[var(--color-ink)]" title="restart the demo">
+        ${svg("i-refresh", "size-3.5")}<span>restart</span>
+      </button>
+      <iframe data-preview="${esc(resultKey)}" class="h-full w-full rounded-lg bg-white shadow-inner" sandbox="${PREVIEW_SANDBOX}" allow="${PREVIEW_ALLOW}" referrerpolicy="no-referrer" srcdoc="${esc(doc)}" title="Preview generated by ${esc(r.id)}"></iframe>
+    </div>`;
+}
+
 // Content for a finished result (output / code / preview).
-export function doneContentHTML(r: ResultView, viewMode: ViewMode): string {
+export function doneContentHTML(
+  r: ResultView,
+  viewMode: ViewMode,
+  options: { deferPreview?: boolean } = {},
+): string {
   const resultKey = r.key || r.id;
   if (viewMode === "preview") {
     if (!r.code) return placeholderHTML("i-browser", "no renderable HTML in this answer");
-    const doc = hardenPreviewDocument(r.code, { bridgeId: resultKey });
-    return `
-      <div class="relative h-full bg-[var(--color-panel)] p-1.5">
-        <button data-action="reload-preview" data-model="${esc(resultKey)}" aria-label="Restart preview" class="absolute right-2 top-2 z-10 flex items-center gap-1 rounded-md border border-[var(--color-line)] bg-[var(--color-panel)]/90 px-2 py-1 text-[10px] text-[var(--color-ink-dim)] backdrop-blur transition-colors hover:text-[var(--color-ink)]" title="restart the demo">
-          ${svg("i-refresh", "size-3.5")}<span>restart</span>
-        </button>
-        <iframe data-preview="${esc(resultKey)}" class="h-full w-full rounded-lg bg-white shadow-inner" sandbox="${PREVIEW_SANDBOX}" referrerpolicy="no-referrer" srcdoc="${esc(doc)}" title="Preview generated by ${esc(r.id)}"></iframe>
-      </div>`;
+    if (options.deferPreview) {
+      return `
+        <div data-deferred-preview class="grid h-full place-items-center bg-[var(--color-panel)] p-6 text-center">
+          <div class="flex max-w-sm flex-col items-center gap-3">
+            ${svg("i-alert", "size-7 text-[var(--color-ink-faint)]")}
+            <div>
+              <p class="text-[13px] font-medium text-[var(--color-ink)]">This public preview contains untrusted code</p>
+              <p class="mt-1 text-[11px] leading-relaxed text-[var(--color-ink-faint)]">It runs offline in a restricted sandbox only after you approve it.</p>
+            </div>
+            <button data-action="run-preview" data-model="${esc(resultKey)}" class="mt-1 rounded-lg bg-[var(--color-accent)] px-4 py-2 text-[12px] font-medium text-black transition-opacity hover:opacity-90">Run preview</button>
+          </div>
+        </div>`;
+    }
+    return previewIframeHTML(r, resultKey);
   }
   if (viewMode === "code") {
     if (!r.code) return placeholderHTML("i-code", "no code block found");
@@ -417,7 +474,12 @@ export function installScrollSync(isOn: () => boolean) {
   window.addEventListener("message", (e) => {
     if (!isOn()) return;
     const d: any = e.data;
-    if (!d || (d.__ab !== "engage" && d.__ab !== "scroll") || typeof d.id !== "string")
+    if (
+      !d ||
+      (d.__ab !== "engage" && d.__ab !== "scroll") ||
+      typeof d.id !== "string" ||
+      (d.__ab === "scroll" && typeof d.ratio !== "number")
+    )
       return;
     const frame = $$<HTMLIFrameElement>("iframe[data-preview]").find(
       (candidate) => candidate.contentWindow === e.source && candidate.dataset.preview === d.id,

@@ -8,6 +8,7 @@ import {
   doneContentHTML,
   hardenPreviewDocument,
   loadHistory,
+  PREVIEW_ALLOW,
   PREVIEW_CSP,
   PREVIEW_SANDBOX,
   renderBattleInsights,
@@ -63,14 +64,20 @@ describe("result extraction", () => {
 describe("preview hardening", () => {
   it("injects a strict CSP and strips navigation gadgets", () => {
     const hardened = hardenPreviewDocument(
-      `<!doctype html><html><head><base href="https://evil.test/"><meta http-equiv="refresh" content="0;url=https://evil.test"></head><body><img src="https://evil.test/t.gif"><script>fetch("https://evil.test")</script></body></html>`,
+      `<!doctype html><html><head><base href="https://evil.test/"><meta http-equiv="refresh" content="0;url=https://evil.test"><link rel="dns-prefetch" href="//evil.test"><link rel="preconnect stylesheet" href="https://evil.test/x.css"></head><body><img src="https://evil.test/t.gif"><script>fetch("https://evil.test")</script></body></html>`,
       { bridgeId: "model-a" },
     );
 
     expect(hardened).toContain(`content="${PREVIEW_CSP}"`);
     expect(hardened).toContain("connect-src 'none'");
+    expect(hardened).toContain("manifest-src 'none'");
     expect(hardened).not.toMatch(/<base\b/i);
     expect(hardened).not.toMatch(/http-equiv\s*=\s*["']?refresh/i);
+    expect(hardened).not.toMatch(/<link\b[^>]*\b(?:dns-prefetch|preconnect)\b/i);
+    expect(hardened).toContain("blockedLink");
+    expect(hardened.indexOf("Content-Security-Policy")).toBeLessThan(
+      hardened.indexOf("fetch("),
+    );
     expect(hardened).toContain("__ab");
   });
 
@@ -94,11 +101,31 @@ describe("preview hardening", () => {
     );
 
     expect(html).toContain(`sandbox="${PREVIEW_SANDBOX}"`);
+    expect(html).toContain(`allow="${PREVIEW_ALLOW}"`);
     expect(html).toContain('referrerpolicy="no-referrer"');
     expect(html).not.toContain("allow-same-origin");
     expect(html).not.toContain("allow-modals");
     expect(html).not.toContain("allow-forms");
     expect(html).toContain("Content-Security-Policy");
+  });
+
+  it("does not create an iframe until a deferred public preview is approved", () => {
+    const html = doneContentHTML(
+      {
+        id: "gpt",
+        key: "openai::gpt",
+        raw: "",
+        code: "<!doctype html><html><body>hi</body></html>",
+        codeHtml: "",
+      },
+      "preview",
+      { deferPreview: true },
+    );
+
+    expect(html).toContain('data-action="run-preview"');
+    expect(html).toContain("untrusted code");
+    expect(html).not.toContain("<iframe");
+    expect(html).not.toContain("srcdoc=");
   });
 });
 

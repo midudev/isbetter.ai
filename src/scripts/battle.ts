@@ -38,6 +38,7 @@ const codeRender = import("./code-render");
 
 const id = new URLSearchParams(location.search).get("id") || "";
 const localBattle = getBattle(id);
+const isPublicBattle = !localBattle;
 
 async function loadBattle(): Promise<Battle | null> {
   if (localBattle) return localBattle;
@@ -67,6 +68,7 @@ type V = HistoryResult & { codeHtml: string };
 
 async function initBattle(b: Battle) {
   const { highlightCode } = await codeRender;
+  const activatedPreviews = new Set<string>();
   $("#battle-when").textContent = fmtWhen(b.ts);
   const promptEl = $("#battle-prompt");
   if (b.prompt) promptEl.textContent = b.prompt;
@@ -150,7 +152,14 @@ async function initBattle(b: Battle) {
     const resultContent =
       v.state === "error"
         ? `<div class="grid h-full place-items-center p-5 text-center"><div class="flex flex-col items-center gap-2 text-red-400/90">${svg("i-alert", "size-6")}<span class="max-w-[24rem] text-[12px] leading-relaxed">${esc(v.error || "Request failed.")}</span></div></div>`
-        : doneContentHTML({ ...v, id: label, key: keyOf(v) }, viewMode);
+        : doneContentHTML(
+            { ...v, id: label, key: keyOf(v) },
+            viewMode,
+            {
+              deferPreview:
+                isPublicBattle && !activatedPreviews.has(keyOf(v)),
+            },
+          );
     const content =
       v.warning && v.state !== "error"
         ? `<div class="flex h-full min-h-0 flex-col">
@@ -299,6 +308,15 @@ async function initBattle(b: Battle) {
         const prev = sp.textContent;
         sp.textContent = "copied";
         setTimeout(() => (sp.textContent = prev), 1200);
+      }
+    } else if (btn.dataset.action === "run-preview" && v.code) {
+      activatedPreviews.add(keyOf(v));
+      const deferred = btn.closest("[data-deferred-preview]");
+      if (deferred) {
+        deferred.outerHTML = doneContentHTML(
+          { ...v, id: displayLabel(v), key: keyOf(v) },
+          "preview",
+        );
       }
     } else if (btn.dataset.action === "reload-preview") {
       const f = btn
