@@ -62,10 +62,14 @@ export function extractCode(text: string): string {
   return html || "";
 }
 export function extractAnswer(text: string): string {
-  const withoutFences = text
+  // Drop fenced blocks first, then any unfenced HTML document left behind.
+  let answer = text
     .replace(/```[\w+-]*[^\S\r\n]*\r?\n?[\s\S]*?(?:```|$)/g, "")
     .trim();
-  return withoutFences || (extractCode(text) ? "" : text.trim());
+  const htmlStart = answer.search(/<!doctype html|<html[\s>]/i);
+  if (htmlStart >= 0) answer = answer.slice(0, htmlStart).trim();
+  if (answer) return answer;
+  return extractCode(text) ? "" : text.trim();
 }
 export function hasIncompleteCodeFence(text: string): boolean {
   return (text.match(/```/g)?.length || 0) % 2 === 1;
@@ -430,8 +434,25 @@ export function doneContentHTML(
   }
   const text = extractAnswer(r.raw);
   const thoughts = thoughtsHTML(r.reasoning || "", false);
-  if (!text && !thoughts) return placeholderHTML("i-text", "empty response");
-  return `<div class="result-scroll h-full overflow-auto p-4 text-[13px] leading-relaxed text-[var(--color-ink-dim)]">${thoughts}<div class="whitespace-pre-wrap break-words">${esc(text)}</div></div>`;
+  const codeCta = r.code
+    ? `<div class="${text || thoughts ? "mt-5 border-t border-[var(--color-line)] pt-4" : ""}">
+        <button type="button" data-action="view-code" data-model="${esc(resultKey)}" class="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-line-hi)] bg-[var(--color-panel)] px-3 py-2 text-[12px] text-[var(--color-ink)] transition-colors hover:border-[var(--color-accent)]/40 hover:text-[var(--color-accent)]">
+          ${svg("i-code", "size-3.5")}<span>View code</span>
+        </button>
+      </div>`
+    : "";
+  if (!text && !thoughts) {
+    if (!r.code) return placeholderHTML("i-text", "empty response");
+    return `
+      <div class="grid h-full place-items-center p-6 text-center">
+        <div class="flex max-w-sm flex-col items-center gap-3">
+          ${svg("i-code", "size-7 text-[var(--color-ink-faint)]")}
+          <p class="text-[13px] text-[var(--color-ink-dim)]">This response is mostly code — open the Code tab to inspect it.</p>
+          ${codeCta}
+        </div>
+      </div>`;
+  }
+  return `<div class="result-scroll h-full overflow-auto p-4 text-[13px] leading-relaxed text-[var(--color-ink-dim)]">${thoughts}<div class="whitespace-pre-wrap break-words">${esc(text)}</div>${codeCta}</div>`;
 }
 
 /* ------------------------------ scroll-link ------------------------------ */

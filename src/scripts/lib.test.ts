@@ -75,6 +75,30 @@ describe("result extraction", () => {
     expect(hasIncompleteCodeFence(truncated)).toBe(true);
     expect(hasIncompleteCodeFence(response)).toBe(false);
   });
+
+  it("strips unfenced HTML documents from the prose output", () => {
+    const mixed =
+      "I built a responsive pricing page.\n\n<!doctype html><html><body><h1>Pricing</h1></body></html>";
+    expect(extractAnswer(mixed)).toBe("I built a responsive pricing page.");
+    expect(extractCode(mixed)).toContain("<!doctype html>");
+  });
+
+  it("offers a code tab affordance in the finished output view", () => {
+    const html = doneContentHTML(
+      {
+        id: "gpt",
+        key: "openai::gpt",
+        raw: "A short summary.\n\n```html\n<!doctype html><html><body>hi</body></html>\n```",
+        code: "<!doctype html><html><body>hi</body></html>",
+        codeHtml: "",
+      },
+      "output",
+    );
+    expect(html).toContain("A short summary.");
+    expect(html).not.toContain("<!doctype html>");
+    expect(html).toContain('data-action="view-code"');
+    expect(html).toContain("View code");
+  });
 });
 
 describe("preview hardening", () => {

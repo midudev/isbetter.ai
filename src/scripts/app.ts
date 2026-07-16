@@ -1635,6 +1635,8 @@ els.results.addEventListener("click", async (e) => {
   } else if (action === "dismiss-waiting") {
     entry.waitingDismissed = true;
     btn.closest("[data-waiting-overlay]")?.remove();
+  } else if (action === "view-code") {
+    setView("code");
   } else if (action === "rerun") {
     if (!keyFor(entry.provider).trim()) return openKeyModal();
     await callModel(entry);

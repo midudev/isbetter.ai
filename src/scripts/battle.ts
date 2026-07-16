@@ -326,6 +326,8 @@ async function initBattle(b: Battle) {
         .closest("article")
         ?.querySelector("iframe[data-preview]") as HTMLIFrameElement | null;
       if (f) restartPreview(f);
+    } else if (btn.dataset.action === "view-code") {
+      setView("code");
     } else if (btn.dataset.action === "open" && v.code) {
       openHardenedPreview(v.code, `Preview · ${displayLabel(v)}`);
     }
