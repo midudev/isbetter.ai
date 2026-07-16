@@ -25,13 +25,14 @@ export default defineConfig({
   security: {
     csp: {
       algorithm: 'SHA-512',
+      // Delivered via <meta>. Keep frame-ancestors (and other header-only
+      // directives) in public/_headers — browsers ignore them in meta CSP.
       directives: [
         "default-src 'self'",
         "base-uri 'none'",
         `connect-src 'self' ${inferenceApiOrigins.join(' ')}`,
         "font-src 'self' data:",
         "form-action 'self'",
-        "frame-ancestors 'self'",
         "frame-src 'self' blob:",
         "img-src 'self' data: blob:",
         "manifest-src 'self'",
@@ -39,6 +40,11 @@ export default defineConfig({
         "object-src 'none'",
         "worker-src 'none'",
       ],
+      // Runtime style="" / element.style (badges, charts) cannot be hashed.
+      // Scope unsafe-inline to attributes only; <style> tags stay hashed.
+      styleDirective: {
+        resources: [{ resource: "'unsafe-inline'", kind: 'attribute' }],
+      },
     },
   },
   vite: {
