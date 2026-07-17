@@ -254,9 +254,15 @@ function numberedCodeHTML(highlighted: string): string {
 }
 
 /* ------------------------ untrusted preview hardening --------------------- */
-// Interactive demos must run JS, but public HTML is untrusted. We keep them
-// useful (inline scripts/styles, data: assets) while blocking network I/O,
-// form exfil, nested frames, and escaping the preview chrome.
+// API keys live in the parent page's localStorage (ab:key:*). The hard
+// requirement is that preview code must never read that storage. Opaque-origin
+// iframes (sandbox without allow-same-origin) enforce this: parent/top storage
+// is cross-origin and inaccessible. Everything else (CSP, nav guard, allow=)
+// is defense in depth around that boundary.
+//
+// Interactive demos still need JS. We keep them useful (inline scripts/styles,
+// data: assets) while blocking network I/O, form exfil, nested frames, and
+// escaping the preview chrome.
 export const PREVIEW_CSP = [
   "default-src 'none'",
   "script-src 'unsafe-inline'",
@@ -274,8 +280,30 @@ export const PREVIEW_CSP = [
   "manifest-src 'none'",
 ].join("; ");
 
-/** Tightest sandbox that still allows interactive demos. No same-origin, popups, forms, or modals. */
+/**
+ * Tightest sandbox that still allows interactive demos.
+ * MUST stay exactly "allow-scripts" — never add allow-same-origin (that would
+ * let the preview share the parent origin and read localStorage / API keys).
+ */
 export const PREVIEW_SANDBOX = "allow-scripts";
+
+/** CSP for the blob "open in new tab" wrapper. No scripts in the wrapper
+ *  itself (blob pages inherit the app origin and could otherwise touch
+ *  localStorage). frame-src stays open so the nested srcdoc iframe can load;
+ *  that iframe is what carries PREVIEW_SANDBOX / PREVIEW_CSP. */
+export const PREVIEW_WRAPPER_CSP = [
+  "default-src 'none'",
+  "script-src 'none'",
+  "style-src 'unsafe-inline'",
+  "frame-src 'self'",
+  "child-src 'self'",
+  "object-src 'none'",
+  "base-uri 'none'",
+  "form-action 'none'",
+  "connect-src 'none'",
+  "worker-src 'none'",
+].join("; ");
+
 const PREVIEW_FALLBACK_BACKGROUND = "#080a08";
 
 /** Deny browser/device capabilities that interactive demos do not need. */
@@ -353,12 +381,25 @@ export function hardenPreviewDocument(
 }
 
 /**
+ * Blob-tab shell around untrusted HTML. The wrapper is same-origin with the
+ * app (blob: inherits creator origin), so it must not run any script — only a
+ * nested opaque-origin iframe may execute the demo.
+ */
+export function hardenedPreviewWrapperHTML(
+  code: string,
+  title = "AI Battle preview",
+): string {
+  const inner = hardenPreviewDocument(code);
+  return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${PREVIEW_WRAPPER_CSP}"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title><style>html,body{margin:0;height:100%;background:${PREVIEW_FALLBACK_BACKGROUND}}iframe{display:block;width:100%;height:100%;border:0;background:${PREVIEW_FALLBACK_BACKGROUND}}</style></head><body><iframe sandbox="${PREVIEW_SANDBOX}" csp="${esc(PREVIEW_CSP)}" allow="${PREVIEW_ALLOW}" referrerpolicy="no-referrer" srcdoc="${esc(inner)}" title="${esc(title)}"></iframe></body></html>`;
+}
+
+/**
  * Open untrusted HTML in a new tab without giving it a free top-level page.
- * The blob wrapper is ours; the demo runs inside a nested sandboxed iframe.
+ * The blob wrapper is ours (no scripts); the demo runs inside a nested
+ * sandboxed iframe without same-origin access to localStorage.
  */
 export function openHardenedPreview(code: string, title = "AI Battle preview"): void {
-  const inner = hardenPreviewDocument(code);
-  const wrapper = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title><style>html,body{margin:0;height:100%;background:${PREVIEW_FALLBACK_BACKGROUND}}iframe{display:block;width:100%;height:100%;border:0;background:${PREVIEW_FALLBACK_BACKGROUND}}</style></head><body><iframe sandbox="${PREVIEW_SANDBOX}" csp="${esc(PREVIEW_CSP)}" allow="${PREVIEW_ALLOW}" referrerpolicy="no-referrer" srcdoc="${esc(inner)}" title="${esc(title)}"></iframe></body></html>`;
+  const wrapper = hardenedPreviewWrapperHTML(code, title);
   const url = URL.createObjectURL(new Blob([wrapper], { type: "text/html" }));
   window.open(url, "_blank", "noopener,noreferrer");
   setTimeout(() => URL.revokeObjectURL(url), 60_000);

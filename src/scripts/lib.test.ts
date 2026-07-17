@@ -10,9 +10,11 @@ import {
   estTokens,
   hardenPreviewDocument,
   loadHistory,
+  hardenedPreviewWrapperHTML,
   PREVIEW_ALLOW,
   PREVIEW_CSP,
   PREVIEW_SANDBOX,
+  PREVIEW_WRAPPER_CSP,
   renderBattleInsights,
   renderMetricsTimeline,
   saveHistory,
@@ -102,6 +104,14 @@ describe("result extraction", () => {
 });
 
 describe("preview hardening", () => {
+  it("keeps the sandbox opaque so previews cannot read parent localStorage", () => {
+    // API keys are ab:key:* in the parent origin. allow-same-origin would
+    // collapse that isolation.
+    expect(PREVIEW_SANDBOX).toBe("allow-scripts");
+    expect(PREVIEW_SANDBOX.split(/\s+/)).toEqual(["allow-scripts"]);
+    expect(PREVIEW_SANDBOX).not.toContain("allow-same-origin");
+  });
+
   it("injects a strict CSP and strips navigation gadgets", () => {
     const hardened = hardenPreviewDocument(
       `<!doctype html><html><head><base href="https://evil.test/"><meta http-equiv="refresh" content="0;url=https://evil.test"><link rel="dns-prefetch" href="//evil.test"><link rel="preconnect stylesheet" href="https://evil.test/x.css"></head><body><map><area href="https://evil.test/phish"></map><img src="https://evil.test/t.gif"><script>fetch("https://evil.test")</script></body></html>`,
@@ -167,6 +177,24 @@ describe("preview hardening", () => {
     expect(html).toContain("Content-Security-Policy");
     expect(html).toContain("bg-[var(--color-surface)] opacity-0");
     expect(html).toContain("transition-opacity duration-300");
+  });
+
+  it("opens new-tab previews via a scriptless wrapper and nested opaque iframe", () => {
+    const wrapper = hardenedPreviewWrapperHTML(
+      `<!doctype html><html><body><script>parent.localStorage.getItem("ab:key:openai")</script></body></html>`,
+      'Title <">&',
+    );
+
+    expect(wrapper).toContain(`content="${PREVIEW_WRAPPER_CSP}"`);
+    expect(wrapper).toContain("script-src 'none'");
+    expect(wrapper).toContain(`sandbox="${PREVIEW_SANDBOX}"`);
+    expect(wrapper).not.toContain("allow-same-origin");
+    expect(wrapper).toContain("Title &lt;&quot;&gt;&amp;");
+    // Untrusted markup only appears inside the escaped srcdoc attribute.
+    const srcdocMatch = wrapper.match(/srcdoc="([^"]*)"/);
+    expect(srcdocMatch).toBeTruthy();
+    expect(srcdocMatch![1]).toContain("localStorage.getItem");
+    expect(wrapper.replace(srcdocMatch![0], "")).not.toContain("localStorage");
   });
 
   it("does not create an iframe until a deferred public preview is approved", () => {
