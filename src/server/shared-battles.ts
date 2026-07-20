@@ -3,7 +3,12 @@ import {
   SharedBattleValidationError,
   parseSharedBattleData,
   type SharedBattle,
+  type SharedBattleData,
 } from "../scripts/shared-battle";
+import {
+  reviewSharedBattleCode,
+  type AiBinding,
+} from "./code-security";
 import {
   PUBLISH_RATE_LIMIT,
   clientIp,
@@ -58,6 +63,7 @@ export async function createSharedBattle(
   request: Request,
   database: BattlesDatabase,
   rateLimitKv?: RateLimitStore | null,
+  ai?: AiBinding | null,
 ): Promise<Response> {
   if (!request.headers.get("content-type")?.toLowerCase().includes("application/json"))
     return json({ error: "Expected application/json" }, { status: 415 });
@@ -86,7 +92,8 @@ export async function createSharedBattle(
     if (rate && !rate.ok) {
       return json(
         {
-          error: `Rate limit exceeded. Try again in ${rate.retryAfterSec}s.`,
+          error: `Easy there — you've hit the publish limit for now. Try again in ${rate.retryAfterSec}s.`,
+          code: "rate_limited",
         },
         {
           status: 429,
@@ -94,6 +101,12 @@ export async function createSharedBattle(
         },
       );
     }
+  } else {
+    // Never publish without rate limiting: anonymous AI-backed review is abusable.
+    return json(
+      { error: "Publish temporarily unavailable. Try again shortly." },
+      { status: 503, headers: { "cache-control": "no-store" } },
+    );
   }
 
   const body = await request.text();
@@ -107,14 +120,36 @@ export async function createSharedBattle(
     return json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  let payload: string;
+  let battleData: SharedBattleData;
   try {
-    payload = JSON.stringify(parseSharedBattleData(parsed));
+    battleData = parseSharedBattleData(parsed);
   } catch (error) {
     const message =
       error instanceof SharedBattleValidationError ? error.message : "Invalid battle";
     return json({ error: message }, { status: 400 });
   }
+
+  let security;
+  try {
+    security = await reviewSharedBattleCode(battleData.results, ai);
+  } catch {
+    return json(
+      { error: "Security review temporarily unavailable. Try again shortly." },
+      { status: 503, headers: { "cache-control": "no-store" } },
+    );
+  }
+  if (!security.allowed) {
+    return json(
+      {
+        error:
+          "We couldn't make this comparison public — some of the generated code looks like it might not be safe. Sorry about that!",
+        code: "security_review_failed",
+      },
+      { status: 422, headers: { "cache-control": "no-store" } },
+    );
+  }
+
+  const payload = JSON.stringify(battleData);
   if (byteLength(payload) > MAX_SHARED_BATTLE_BYTES)
     return json({ error: "Battle payload is too large" }, { status: 413 });
 

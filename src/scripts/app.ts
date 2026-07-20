@@ -156,10 +156,14 @@ const modelsUrlFor = (p: ProviderId) =>
 const chatUrlFor = (p: ProviderId) =>
   p === "local" ? `${trimBase(keyFor("local"))}/chat/completions` : PROVIDERS[p].chatUrl;
 
+/** Temporarily off while public publish / security review is reviewed. */
+const SHARE_PUBLIC_ENABLED = false;
+
 let viewMode = (localStorage.getItem(LS.view) as ViewMode) || "preview";
 let scrollLink = localStorage.getItem(LS.scrollLink) === "1";
 let blindMode = localStorage.getItem(LS.blind) === "1";
-let sharePublic = localStorage.getItem(LS.sharePublic) === "1";
+let sharePublic =
+  SHARE_PUBLIC_ENABLED && localStorage.getItem(LS.sharePublic) === "1";
 let revealed = !blindMode;
 let blindOrder: string[] = [];
 const blindAliases = new Map<string, string>();
@@ -761,6 +765,14 @@ function toggleBlindMode() {
 els.blindBtn.addEventListener("click", toggleBlindMode);
 
 function refreshSharePublicUI() {
+  els.sharePublicBtn.classList.toggle("hidden", !SHARE_PUBLIC_ENABLED);
+  els.sharePublicBtn.hidden = !SHARE_PUBLIC_ENABLED;
+  els.sharePublicBtn.setAttribute("aria-hidden", String(!SHARE_PUBLIC_ENABLED));
+  if (!SHARE_PUBLIC_ENABLED) {
+    sharePublic = false;
+    els.sharePublicBtn.disabled = true;
+    return;
+  }
   els.sharePublicIcon.setAttribute("href", sharePublic ? "#i-link" : "#i-world");
   els.sharePublicBtn.classList.toggle("border-[var(--color-accent)]", sharePublic);
   els.sharePublicBtn.classList.toggle("text-[var(--color-accent)]", sharePublic);
@@ -771,7 +783,7 @@ function refreshSharePublicUI() {
 }
 
 function toggleSharePublic() {
-  if (running) return;
+  if (!SHARE_PUBLIC_ENABLED || running) return;
   sharePublic = !sharePublic;
   localStorage.setItem(LS.sharePublic, sharePublic ? "1" : "0");
   refreshSharePublicUI();
@@ -848,7 +860,7 @@ function syncRunBtn() {
   }
   els.rerunAllBtn.disabled = running;
   els.blindBtn.disabled = running;
-  els.sharePublicBtn.disabled = running;
+  els.sharePublicBtn.disabled = !SHARE_PUBLIC_ENABLED || running;
   // "Re-run all" only matters once there are results to refresh.
   els.rerunAllBtn.classList.toggle("hidden", entries.size === 0);
 }
@@ -1666,6 +1678,8 @@ function persistHistory() {
 
 function resetSharePanel() {
   els.sharePanel.classList.add("hidden");
+  els.sharePanel.hidden = true;
+  els.sharePanel.setAttribute("aria-hidden", "true");
   els.shareStatus.classList.add("hidden");
   els.shareStatus.textContent = "";
   els.shareUrlRow.classList.add("hidden");
@@ -1677,10 +1691,16 @@ function resetSharePanel() {
 }
 
 function showSharePanel(battle: Battle) {
+  if (!SHARE_PUBLIC_ENABLED) {
+    resetSharePanel();
+    return;
+  }
   if (!battle.results.some((result) => result.state === "done")) {
     resetSharePanel();
     return;
   }
+  els.sharePanel.hidden = false;
+  els.sharePanel.setAttribute("aria-hidden", "false");
   els.sharePanel.classList.remove("hidden");
   els.shareBtn.disabled = false;
   if (!battle.sharedId) {
@@ -1713,6 +1733,7 @@ async function copyPublicBattleUrl(id: string) {
 }
 
 async function publishBattle(battle: Battle): Promise<boolean> {
+  if (!SHARE_PUBLIC_ENABLED) return false;
   if (!battle.results.some((result) => result.state === "done")) {
     resetSharePanel();
     return false;
@@ -1762,6 +1783,7 @@ async function publishBattle(battle: Battle): Promise<boolean> {
 }
 
 els.shareBtn.addEventListener("click", async () => {
+  if (!SHARE_PUBLIC_ENABLED) return;
   const battle = history.find((item) => battleId(item) === currentBattleId);
   if (!battle) return;
   if (battle.sharedId) {
@@ -1836,6 +1858,10 @@ function saveBattle() {
   };
   history.unshift(battle);
   persistHistory();
+  if (!SHARE_PUBLIC_ENABLED) {
+    resetSharePanel();
+    return;
+  }
   showSharePanel(battle);
   if (sharePublic) void publishBattle(battle);
 }

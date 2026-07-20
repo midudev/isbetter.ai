@@ -2,6 +2,9 @@
 	"$schema": "./node_modules/wrangler/config-schema.json",
 	"name": "ai-battle",
 	"compatibility_date": "2026-07-14",
+	"ai": {
+		"binding": "AI"
+	},
 	"d1_databases": [
 		{
 			"binding": "BATTLES_DB",

@@ -160,6 +160,7 @@ describe("shared battle sanitizing", () => {
 
   it("strips injected personal fields before storing, even if a client sends them", async () => {
     const database = new MemoryDatabase();
+    const kv = new MemoryKV();
     const dirty = {
       ...toSharedBattleData(battleFixture()),
       system: "should never be stored",
@@ -183,6 +184,7 @@ describe("shared battle sanitizing", () => {
         body: JSON.stringify(dirty),
       }),
       database,
+      kv,
     );
     expect(created.status).toBe(201);
     const stored = [...database.rows.values()][0];
@@ -231,12 +233,13 @@ describe("shared battle sanitizing", () => {
 describe("shared battle API handlers", () => {
   it("stores and retrieves a sanitized immutable battle", async () => {
     const database = new MemoryDatabase();
+    const kv = new MemoryKV();
     const request = new Request("https://battle.test/api/battles", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(toSharedBattleData(battleFixture())),
     });
-    const created = await createSharedBattle(request, database);
+    const created = await createSharedBattle(request, database, kv);
     const createdBody = (await created.json()) as { id: string; url: string };
 
     expect(created.status).toBe(201);
@@ -253,6 +256,7 @@ describe("shared battle API handlers", () => {
 
   it("rejects oversized and invalid requests before writing", async () => {
     const database = new MemoryDatabase();
+    const kv = new MemoryKV();
     const oversized = await createSharedBattle(
       new Request("https://battle.test/api/battles", {
         method: "POST",
@@ -263,6 +267,7 @@ describe("shared battle API handlers", () => {
         body: "{}",
       }),
       database,
+      kv,
     );
     const invalid = await createSharedBattle(
       new Request("https://battle.test/api/battles", {
@@ -271,6 +276,7 @@ describe("shared battle API handlers", () => {
         body: JSON.stringify({ schemaVersion: 1, results: [] }),
       }),
       database,
+      kv,
     );
 
     expect(oversized.status).toBe(413);
@@ -301,10 +307,11 @@ describe("shared battle API handlers", () => {
     }
 
     const limited = await post();
-    const body = (await limited.json()) as { error: string };
+    const body = (await limited.json()) as { error: string; code?: string };
     expect(limited.status).toBe(429);
     expect(limited.headers.get("retry-after")).toBeTruthy();
-    expect(body.error).toMatch(/rate limit/i);
+    expect(body.code).toBe("rate_limited");
+    expect(body.error).toMatch(/publish limit/i);
     expect(database.rows.size).toBe(PUBLISH_RATE_LIMIT.limit);
   });
 
@@ -335,6 +342,45 @@ describe("shared battle API handlers", () => {
 
     expect(response.status).toBe(503);
     expect(body.error).toMatch(/unavailable/i);
+    expect(database.rows.size).toBe(0);
+  });
+
+  it("rejects publishes whose code fails deterministic security review", async () => {
+    const database = new MemoryDatabase();
+    const kv = new MemoryKV();
+    const battle = toSharedBattleData(battleFixture());
+    battle.results[0].code =
+      '<script src="https://evil.example/pwn.js"></script><script>eval(atob("YQ=="))</script>';
+
+    const response = await createSharedBattle(
+      new Request("https://battle.test/api/battles", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(battle),
+      }),
+      database,
+      kv,
+      null,
+    );
+    const body = (await response.json()) as { error: string; code?: string };
+
+    expect(response.status).toBe(422);
+    expect(body.code).toBe("security_review_failed");
+    expect(body.error).toMatch(/might not be safe/i);
+    expect(database.rows.size).toBe(0);
+  });
+
+  it("refuses to publish when rate-limit store is missing", async () => {
+    const database = new MemoryDatabase();
+    const response = await createSharedBattle(
+      new Request("https://battle.test/api/battles", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(toSharedBattleData(battleFixture())),
+      }),
+      database,
+    );
+    expect(response.status).toBe(503);
     expect(database.rows.size).toBe(0);
   });
 });

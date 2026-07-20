@@ -195,9 +195,12 @@ const PROMPT_EXAMPLES = [
 								<button
 									id="share-public-btn"
 									type="button"
-									class="control-surface flex min-h-11 flex-1 items-center justify-center gap-2 px-3 text-[11px] sm:flex-none"
+									hidden
+									class="control-surface hidden min-h-11 flex-1 items-center justify-center gap-2 px-3 text-[11px] sm:flex-none"
 									data-tip="When enabled, successful results are published after the battle and you get a unique shareable URL. Only the prompt and model outputs are uploaded — never API keys or personal data. Fully anonymous."
 									aria-pressed="false"
+									aria-hidden="true"
+									tabindex="-1"
 								>
 									<svg class="size-4"><use id="share-public-icon" href="#i-world"></use></svg>
 									<span>Share public</span>
@@ -249,7 +252,7 @@ const PROMPT_EXAMPLES = [
 			</div>
 			<div class="scroll-affordance"><div id="battle-summary-list" class="overflow-x-auto"></div></div>
 		</section>
-		<section id="share-panel" class="mb-6 hidden py-4" aria-labelledby="share-title">
+		<section id="share-panel" class="mb-6 hidden py-4" aria-labelledby="share-title" hidden aria-hidden="true">
 			<div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 				<div class="flex max-w-3xl items-start gap-3">
 					<span class="grid size-9 shrink-0 place-items-center rounded-lg bg-[var(--color-accent)]/10 text-[var(--color-accent)]">

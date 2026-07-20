@@ -27,9 +27,10 @@ export interface RateLimitResult {
   retryAfterSec: number;
 }
 
+/** Per-IP cap on POST /api/battles (includes security review / Workers AI cost). */
 export const PUBLISH_RATE_LIMIT: RateLimitConfig = {
   limit: 10,
-  windowSec: 60 * 60,
+  windowSec: 60 * 60, // 10 publishes per hour
   prefix: "rl:publish",
 };
 
