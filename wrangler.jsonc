@@ -1,6 +1,6 @@
 {
 	"$schema": "./node_modules/wrangler/config-schema.json",
-	"name": "ai-battle",
+	"name": "isbetter-ai",
 	"compatibility_date": "2026-07-14",
 	"ai": {
 		"binding": "AI"
