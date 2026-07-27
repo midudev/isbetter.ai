@@ -31,6 +31,7 @@ import {
   restartPreview,
   modelBadge,
   type Battle,
+  type BlindBattleState,
   type HistoryResult,
   type MetricSample,
   type ViewMode,
@@ -230,6 +231,9 @@ const els = {
   blindBtn: $<HTMLButtonElement>("#blind-mode-btn"),
   blindIcon: $("#blind-mode-icon"),
   blindCheck: $("#blind-mode-check"),
+  resultsBlindBtn: $<HTMLButtonElement>("#results-blind-btn"),
+  resultsBlindIcon: $("#results-blind-icon"),
+  resultsBlindCheck: $("#results-blind-check"),
   sharePublicBtn: $<HTMLButtonElement>("#share-public-btn"),
   sharePublicIcon: $("#share-public-icon"),
   sharePublicCheck: $("#share-public-check"),
@@ -757,14 +761,29 @@ function refreshBlindUI() {
   els.blindBtn.classList.toggle("text-[var(--color-ink-dim)]", !blindMode);
   els.blindBtn.setAttribute("aria-pressed", String(blindMode));
   refreshToggleCheck(els.blindCheck, blindMode);
-  els.blindBtn.disabled = running;
-  const canToggleReveal = blindMode && entries.size > 0;
-  els.revealBtn.classList.toggle("hidden", !canToggleReveal);
-  els.revealBtn.classList.toggle("flex", canToggleReveal);
-  els.revealBtn.setAttribute("aria-pressed", String(revealed));
-  els.revealBtn.title = revealed ? "Hide model identities again" : "Reveal model identities";
-  els.revealIcon.setAttribute("href", revealed ? "#i-eye-off" : "#i-eye");
-  els.revealLabel.textContent = revealed ? "Hide" : "Reveal";
+  // Blind can be toggled on finished or in-progress results; only block the
+  // pre-run preference control while a fetch is in flight if there are no cards yet.
+  els.blindBtn.disabled = running && entries.size === 0;
+  // Always keep Blind + Hide/Reveal on the results toolbar once there are cards,
+  // so leaving blind mode never removes the control needed to re-enter it.
+  const hasResults = entries.size > 0;
+  const identitiesHidden = isConcealed();
+  els.resultsBlindBtn.classList.toggle("hidden", !hasResults);
+  els.resultsBlindBtn.classList.toggle("flex", hasResults);
+  els.resultsBlindBtn.classList.toggle("border-[var(--color-accent)]", blindMode);
+  els.resultsBlindBtn.classList.toggle("text-[var(--color-accent)]", blindMode);
+  els.resultsBlindBtn.classList.toggle("text-[var(--color-ink-dim)]", !blindMode);
+  els.resultsBlindBtn.setAttribute("aria-pressed", String(blindMode));
+  els.resultsBlindIcon.setAttribute("href", blindMode ? "#i-eye-off" : "#i-eye");
+  refreshToggleCheck(els.resultsBlindCheck, blindMode);
+  els.revealBtn.classList.toggle("hidden", !hasResults);
+  els.revealBtn.classList.toggle("flex", hasResults);
+  els.revealBtn.setAttribute("aria-pressed", String(!identitiesHidden));
+  els.revealBtn.title = identitiesHidden
+    ? "Show model identities (leave blind mode)"
+    : "Hide model identities (enter blind mode)";
+  els.revealIcon.setAttribute("href", identitiesHidden ? "#i-eye" : "#i-eye-off");
+  els.revealLabel.textContent = identitiesHidden ? "Reveal" : "Hide";
 }
 
 function rerenderIdentities() {
@@ -772,22 +791,55 @@ function rerenderIdentities() {
   computeBests();
 }
 
-function toggleBlindMode() {
-  if (running) return;
-  blindMode = !blindMode;
+function applyBlindOrder(order: string[]) {
+  setBlindOrder(order);
+  order.forEach((key) => {
+    const entry = entries.get(key);
+    if (entry) els.results.appendChild(entry.el);
+  });
+}
+
+/** Reuse the previous A/B mapping when re-enabling; shuffle only on first blind. */
+function ensureBlindOrder() {
+  const keys = [...entries.keys()];
+  const intact = blindOrder.length === keys.length && blindOrder.every((key) => entries.has(key));
+  applyBlindOrder(intact ? blindOrder : shuffled(keys));
+}
+
+function currentBattleBlindState(): BlindBattleState | undefined {
+  if (!blindMode || !blindOrder.length) return undefined;
+  return {
+    enabled: true,
+    revealed,
+    order: [...blindOrder],
+    aliases: Object.fromEntries(blindAliases),
+  };
+}
+
+function syncCurrentBattleBlind() {
+  if (!currentBattleId) return;
+  const battle = history.find((item) => battleId(item) === currentBattleId);
+  if (!battle) return;
+  battle.blind = currentBattleBlindState();
+  persistHistory();
+}
+
+function setBlindMode(next: boolean) {
+  blindMode = next;
   localStorage.setItem(LS.blind, blindMode ? "1" : "0");
   revealed = !blindMode;
-  if (blindMode && entries.size) {
-    setBlindOrder(shuffled([...entries.keys()]));
-    blindOrder.forEach((key) => {
-      const entry = entries.get(key);
-      if (entry) els.results.appendChild(entry.el);
-    });
-  }
+  if (blindMode && entries.size) ensureBlindOrder();
+  syncCurrentBattleBlind();
   refreshBlindUI();
   rerenderIdentities();
 }
+
+function toggleBlindMode() {
+  if (running && entries.size === 0) return;
+  setBlindMode(!blindMode);
+}
 els.blindBtn.addEventListener("click", toggleBlindMode);
+els.resultsBlindBtn.addEventListener("click", toggleBlindMode);
 
 function refreshSharePublicUI() {
   els.sharePublicBtn.classList.toggle("hidden", !SHARE_PUBLIC_ENABLED);
@@ -816,17 +868,10 @@ function toggleSharePublic() {
 els.sharePublicBtn.addEventListener("click", toggleSharePublic);
 
 els.revealBtn.addEventListener("click", () => {
-  if (!blindMode) return;
-  revealed = !revealed;
-  if (currentBattleId) {
-    const battle = history.find((item) => battleId(item) === currentBattleId);
-    if (battle?.blind) {
-      battle.blind.revealed = revealed;
-      persistHistory();
-    }
-  }
-  refreshBlindUI();
-  rerenderIdentities();
+  if (!entries.size) return;
+  // Full blind on/off — not a peek — so the control never depends on blind
+  // already being enabled (and never disappears after leaving blind mode).
+  setBlindMode(!isConcealed());
 });
 
 /* ===================================================================== */
@@ -884,7 +929,7 @@ function syncRunBtn() {
     els.runBtn.setAttribute("aria-label", label);
   }
   els.rerunAllBtn.disabled = running;
-  els.blindBtn.disabled = running;
+  els.blindBtn.disabled = running && entries.size === 0;
   els.sharePublicBtn.disabled = !SHARE_PUBLIC_ENABLED || running;
   // "Re-run all" only matters once there are results to refresh.
   els.rerunAllBtn.classList.toggle("hidden", entries.size === 0);
@@ -1873,14 +1918,7 @@ function saveBattle() {
     prompt: els.prompt.value.trim(),
     system: systemPrompt,
     results,
-    blind: blindMode
-      ? {
-          enabled: true,
-          revealed,
-          order: [...blindOrder],
-          aliases: Object.fromEntries(blindAliases),
-        }
-      : undefined,
+    blind: currentBattleBlindState(),
   };
   history.unshift(battle);
   persistHistory();

@@ -41,13 +41,27 @@ const arena = variant === "arena";
 		</button>
 
 		<button
-			id="reveal-models-btn"
-			class="hidden min-h-9 items-center gap-1.5 rounded-lg border border-[var(--color-accent)]/40 bg-[var(--color-accent)]/10 px-3 text-[12px] text-[var(--color-accent)] transition-colors hover:bg-[var(--color-accent)]/15"
-			title="Reveal model identities"
+			id="results-blind-btn"
+			type="button"
+			class="hidden min-h-8 items-center gap-1.5 rounded-lg px-2.5 text-[11px] text-[var(--color-ink-dim)] transition-colors hover:bg-[var(--color-panel-hi)] hover:text-[var(--color-ink)]"
+			title="Hide model names and shuffle cards so you can judge without knowing who wrote what"
 			aria-pressed="false"
 		>
-			<svg class="size-4"><use id="reveal-models-icon" href="#i-eye"></use></svg>
-			<span id="reveal-models-label">Reveal</span>
+			<svg class="size-4"><use id="results-blind-icon" href="#i-eye"></use></svg>
+			<span>Blind</span>
+			<span id="results-blind-check" class="grid size-4 place-items-center rounded border border-[var(--color-line-hi)] text-transparent" aria-hidden="true">
+				<svg class="size-3"><use href="#i-check"></use></svg>
+			</span>
+		</button>
+
+		<button
+			id="reveal-models-btn"
+			class="hidden min-h-9 items-center gap-1.5 rounded-lg border border-[var(--color-accent)]/40 bg-[var(--color-accent)]/10 px-3 text-[12px] text-[var(--color-accent)] transition-colors hover:bg-[var(--color-accent)]/15"
+			title="Hide model identities"
+			aria-pressed="false"
+		>
+			<svg class="size-4"><use id="reveal-models-icon" href="#i-eye-off"></use></svg>
+			<span id="reveal-models-label">Hide</span>
 		</button>
 	</div>
 

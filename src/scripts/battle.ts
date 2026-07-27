@@ -25,6 +25,7 @@ import {
   SCROLLLINK_KEY,
   type ViewMode,
   type Battle,
+  type BlindBattleState,
   type HistoryResult,
 } from "./lib";
 import { parseSharedBattle, sharedBattleToBattle } from "./shared-battle";
@@ -95,6 +96,75 @@ async function initBattle(b: Battle) {
   const concealed = () => !!b.blind?.enabled && !revealed;
   const displayLabel = (result: HistoryResult) =>
     concealed() ? b.blind?.aliases[keyOf(result)] || "Model ?" : result.label || result.id;
+
+  let savedBlind: BlindBattleState | undefined = b.blind?.enabled
+    ? { ...b.blind, aliases: { ...b.blind.aliases }, order: [...b.blind.order] }
+    : undefined;
+
+  function shuffled<T>(items: T[]): T[] {
+    const result = [...items];
+    for (let i = result.length - 1; i > 0; i--) {
+      const random = crypto.getRandomValues(new Uint32Array(1))[0] / 2 ** 32;
+      const j = Math.floor(random * (i + 1));
+      [result[i], result[j]] = [result[j], result[i]];
+    }
+    return result;
+  }
+
+  function sortViewsByBlindOrder() {
+    if (!b.blind?.order.length) return;
+    const positions = new Map(b.blind.order.map((key, index) => [key, index]));
+    views.sort(
+      (a, c) =>
+        (positions.get(keyOf(a)) ?? Number.MAX_SAFE_INTEGER) -
+        (positions.get(keyOf(c)) ?? Number.MAX_SAFE_INTEGER),
+    );
+  }
+
+  function enableBlind(): BlindBattleState {
+    if (savedBlind?.order.length) {
+      return { ...savedBlind, enabled: true, revealed: false, aliases: { ...savedBlind.aliases }, order: [...savedBlind.order] };
+    }
+    const order = shuffled(views.map(keyOf));
+    const aliases = Object.fromEntries(
+      order.map((key, index) => [key, `Model ${String.fromCharCode(65 + index)}`]),
+    );
+    return { enabled: true, revealed: false, order, aliases };
+  }
+
+  function persistBlind() {
+    if (isPublicBattle) return;
+    const history = loadHistory();
+    const saved = history.find((item) => item.id === b.id || item.ts === b.ts);
+    if (!saved) return;
+    saved.blind = b.blind;
+    saveHistory(history);
+  }
+
+  function setBlindEnabled(next: boolean) {
+    if (next) {
+      b.blind = enableBlind();
+      savedBlind = {
+        ...b.blind,
+        aliases: { ...b.blind.aliases },
+        order: [...b.blind.order],
+      };
+      revealed = false;
+      sortViewsByBlindOrder();
+    } else {
+      if (b.blind) {
+        savedBlind = {
+          ...b.blind,
+          aliases: { ...b.blind.aliases },
+          order: [...b.blind.order],
+        };
+      }
+      b.blind = undefined;
+      revealed = true;
+    }
+    persistBlind();
+    renderAll();
+  }
 
   // Winner highlights (same logic as the arena).
   const done = views.filter((v) => v.state === "done");
@@ -204,19 +274,39 @@ async function initBattle(b: Battle) {
   }
   const revealIcon = $("#reveal-models-icon");
   const revealLabel = $("#reveal-models-label");
-  const refreshRevealBtn = () => {
+  const blindBtn = $<HTMLButtonElement>("#results-blind-btn");
+  const blindIcon = $("#results-blind-icon");
+  const blindCheck = $("#results-blind-check");
+  const refreshBlindUI = () => {
     const blind = !!b.blind?.enabled;
-    revealBtn.classList.toggle("hidden", !blind);
-    revealBtn.classList.toggle("flex", blind);
-    revealBtn.setAttribute("aria-pressed", String(revealed));
-    revealBtn.title = revealed ? "Hide model identities again" : "Reveal model identities";
-    revealIcon.setAttribute("href", revealed ? "#i-eye-off" : "#i-eye");
-    revealLabel.textContent = revealed ? "Hide" : "Reveal";
+    const identitiesHidden = concealed();
+    // Keep Blind + Hide/Reveal visible forever so the user can re-enter blind
+    // after leaving it.
+    blindBtn.classList.remove("hidden");
+    blindBtn.classList.add("flex");
+    blindBtn.classList.toggle("border-[var(--color-accent)]", blind);
+    blindBtn.classList.toggle("text-[var(--color-accent)]", blind);
+    blindBtn.classList.toggle("text-[var(--color-ink-dim)]", !blind);
+    blindBtn.setAttribute("aria-pressed", String(blind));
+    blindIcon.setAttribute("href", blind ? "#i-eye-off" : "#i-eye");
+    blindCheck.classList.toggle("border-[var(--color-accent)]", blind);
+    blindCheck.classList.toggle("bg-[var(--color-accent)]", blind);
+    blindCheck.classList.toggle("text-black", blind);
+    blindCheck.classList.toggle("border-[var(--color-line-hi)]", !blind);
+    blindCheck.classList.toggle("text-transparent", !blind);
+    revealBtn.classList.remove("hidden");
+    revealBtn.classList.add("flex");
+    revealBtn.setAttribute("aria-pressed", String(!identitiesHidden));
+    revealBtn.title = identitiesHidden
+      ? "Show model identities (leave blind mode)"
+      : "Hide model identities (enter blind mode)";
+    revealIcon.setAttribute("href", identitiesHidden ? "#i-eye" : "#i-eye-off");
+    revealLabel.textContent = identitiesHidden ? "Reveal" : "Hide";
   };
   const renderAll = () => {
     results.innerHTML = views.map(cardHTML).join("");
     renderSummary();
-    refreshRevealBtn();
+    refreshBlindUI();
   };
   renderAll();
 
@@ -284,17 +374,13 @@ async function initBattle(b: Battle) {
   scrollBtn.addEventListener("click", toggleScrollLink);
   installScrollSync(() => scrollLink);
 
+  blindBtn.addEventListener("click", () => {
+    setBlindEnabled(!b.blind?.enabled);
+  });
+
   revealBtn.addEventListener("click", () => {
-    if (!b.blind?.enabled) return;
-    revealed = !revealed;
-    b.blind.revealed = revealed;
-    const history = loadHistory();
-    const saved = history.find((item) => item.id === b.id || item.ts === b.ts);
-    if (saved?.blind) {
-      saved.blind.revealed = revealed;
-      saveHistory(history);
-    }
-    renderAll();
+    // Same full on/off as Blind — keep the control available after leaving blind.
+    setBlindEnabled(!concealed());
   });
 
   /* per-card actions ---------------------------------------------------- */
