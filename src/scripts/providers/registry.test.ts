@@ -9,20 +9,22 @@ import {
 
 describe("provider registry", () => {
   it("contains every supported direct provider", () => {
-    expect(PROVIDER_IDS).toEqual(
-      expect.arrayContaining([
-        "openrouter",
-        "openai",
-        "anthropic",
-        "google",
-        "xai",
-        "deepseek",
-        "mistral",
-        "groq",
-        "cerebras",
-        "local",
-      ]),
-    );
+    expect(PROVIDER_IDS).toEqual([
+      "local",
+      "openrouter",
+      "openai",
+      "anthropic",
+      "google",
+      "xai",
+      "deepseek",
+      "kimi",
+      "mistral",
+      "groq",
+      "cerebras",
+    ]);
+    expect(PROVIDER_IDS[0]).toBe("local");
+    expect(PROVIDERS.kimi.chatUrl).toBe("https://api.moonshot.ai/v1/chat/completions");
+    expect(PROVIDERS.kimi.keyUrl).toContain("platform.kimi.ai");
     expect(PROVIDERS.google.chatUrl).toContain("/openai/chat/completions");
     expect(PROVIDERS.anthropic.body("claude-fable-5", "", "")).toMatchObject({
       max_tokens: 16384,

@@ -1,14 +1,15 @@
 export type ProviderId =
+  | "local"
   | "openrouter"
   | "openai"
   | "anthropic"
   | "google"
   | "xai"
   | "deepseek"
+  | "kimi"
   | "mistral"
   | "groq"
-  | "cerebras"
-  | "local";
+  | "cerebras";
 
 export interface UsageInfo {
   prompt_tokens?: number;

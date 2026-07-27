@@ -4,6 +4,7 @@ import anthropicLogo from "@lobehub/icons-static-svg/icons/anthropic.svg?url";
 import geminiLogo from "@lobehub/icons-static-svg/icons/gemini-color.svg?url";
 import xAILogo from "@lobehub/icons-static-svg/icons/xai.svg?url";
 import deepSeekLogo from "@lobehub/icons-static-svg/icons/deepseek-color.svg?url";
+import kimiLogo from "@lobehub/icons-static-svg/icons/kimi-color.svg?url";
 import mistralLogo from "@lobehub/icons-static-svg/icons/mistral-color.svg?url";
 import groqLogo from "@lobehub/icons-static-svg/icons/groq.svg?url";
 import cerebrasLogo from "@lobehub/icons-static-svg/icons/cerebras-color.svg?url";
@@ -222,6 +223,24 @@ function compatibleProvider(
 }
 
 export const PROVIDERS: Record<ProviderId, Provider> = {
+  local: {
+    id: "local",
+    name: "Local",
+    short: "Local",
+    color: "#8b93a7",
+    logo: LOCAL_LOGO,
+    keyPlaceholder: "http://localhost:11434/v1",
+    keyUrl: "",
+    credentialLabel: "Base URL",
+    credentialHelp: "Ollama · LM Studio · llama.cpp · vLLM · LocalAI",
+    modelsUrl: "",
+    chatUrl: "",
+    browserSupport: "variable",
+    headers: () => ({ "Content-Type": "application/json" }),
+    body: openAIBody(false),
+    parse: parseOpenAIChunk,
+    parseModels: (json) => genericModels(json),
+  },
   openrouter: {
     id: "openrouter",
     name: "OpenRouter",
@@ -335,6 +354,20 @@ export const PROVIDERS: Record<ProviderId, Provider> = {
     chatUrl: "https://api.deepseek.com/chat/completions",
     browserSupport: "variable",
   }),
+  kimi: compatibleProvider({
+    id: "kimi",
+    name: "Kimi",
+    short: "Kimi",
+    color: "#1783ff",
+    logo: kimiLogo,
+    keyPlaceholder: "sk-…",
+    keyUrl: "https://platform.kimi.ai/console/api-keys",
+    credentialLabel: "API key",
+    credentialHelp: "Moonshot AI · OpenAI-compatible Chat Completions.",
+    modelsUrl: "https://api.moonshot.ai/v1/models",
+    chatUrl: "https://api.moonshot.ai/v1/chat/completions",
+    browserSupport: "variable",
+  }),
   mistral: compatibleProvider({
     id: "mistral",
     name: "Mistral AI",
@@ -375,24 +408,6 @@ export const PROVIDERS: Record<ProviderId, Provider> = {
     chatUrl: "https://api.cerebras.ai/v1/chat/completions",
     browserSupport: "variable",
   }),
-  local: {
-    id: "local",
-    name: "Local",
-    short: "Local",
-    color: "#8b93a7",
-    logo: LOCAL_LOGO,
-    keyPlaceholder: "http://localhost:11434/v1",
-    keyUrl: "",
-    credentialLabel: "Base URL",
-    credentialHelp: "Ollama · LM Studio · llama.cpp · vLLM · LocalAI",
-    modelsUrl: "",
-    chatUrl: "",
-    browserSupport: "variable",
-    headers: () => ({ "Content-Type": "application/json" }),
-    body: openAIBody(false),
-    parse: parseOpenAIChunk,
-    parseModels: (json) => genericModels(json),
-  },
 };
 
 export const PROVIDER_IDS = Object.keys(PROVIDERS) as ProviderId[];
