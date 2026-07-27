@@ -1724,6 +1724,9 @@ els.results.addEventListener("click", async (e) => {
     if (!keyFor(entry.provider).trim()) return openKeyModal();
     await callModel(entry);
     computeBests();
+    // Single-model retry never goes through runBattle, so patch the archived
+    // battle in place (or create one if the first run saved nothing).
+    syncCurrentBattleResults();
   } else if (action === "open" && entry.code) {
     openHardenedPreview(entry.code, `Preview · ${displayName(entry.key)}`);
   }
@@ -1879,31 +1882,59 @@ function updateHistoryCount() {
   els.historyClear.classList.toggle("flex", n > 0);
 }
 
-function saveBattle() {
-  const results: HistoryResult[] = [...entries.values()]
+function toHistoryResult(e: Entry): HistoryResult {
+  return {
+    id: e.id,
+    key: e.key,
+    provider: e.provider,
+    label: contenderName(e.key),
+    raw: e.raw,
+    reasoning: e.reasoning,
+    code: e.code,
+    state: e.state === "error" ? "error" : "done",
+    error: e.error,
+    warning: e.warning,
+    promptTokens: e.promptTokens,
+    completionTokens: e.completionTokens,
+    totalTokens: e.totalTokens,
+    cost: e.cost,
+    costKnown: e.costKnown,
+    usageEstimated: e.usageEstimated,
+    durationMs: e.durationMs,
+    ttftMs: e.ttftMs,
+    genMs: e.genMs,
+    metrics: downsampleMetricSamples(e.metrics),
+  };
+}
+
+function snapshotResults(): HistoryResult[] {
+  return [...entries.values()]
     .filter((e) => e.state === "done" || e.state === "error")
-    .map((e) => ({
-      id: e.id,
-      key: e.key,
-      provider: e.provider,
-      label: contenderName(e.key),
-      raw: e.raw,
-      reasoning: e.reasoning,
-      code: e.code,
-      state: e.state === "error" ? "error" : "done",
-      error: e.error,
-      warning: e.warning,
-      promptTokens: e.promptTokens,
-      completionTokens: e.completionTokens,
-      totalTokens: e.totalTokens,
-      cost: e.cost,
-      costKnown: e.costKnown,
-      usageEstimated: e.usageEstimated,
-      durationMs: e.durationMs,
-      ttftMs: e.ttftMs,
-      genMs: e.genMs,
-      metrics: downsampleMetricSamples(e.metrics),
-    }));
+    .map(toHistoryResult);
+}
+
+/** After a per-card re-run, keep the archived battle aligned with live results. */
+function syncCurrentBattleResults() {
+  const results = snapshotResults();
+  if (!results.some((result) => result.state === "done")) return;
+
+  if (currentBattleId) {
+    const battle = history.find((item) => battleId(item) === currentBattleId);
+    if (battle) {
+      battle.results = results;
+      battle.blind = currentBattleBlindState();
+      persistHistory();
+      if (!els.historyDrawer.classList.contains("hidden")) renderHistory();
+      return;
+    }
+  }
+
+  // First run saved nothing (all failed) — archive now that we have a success.
+  saveBattle();
+}
+
+function saveBattle() {
+  const results = snapshotResults();
   // Nothing useful to keep or publish when every model failed (e.g. network/CORS).
   if (!results.some((result) => result.state === "done")) {
     resetSharePanel();
