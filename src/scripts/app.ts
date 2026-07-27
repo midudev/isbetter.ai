@@ -37,6 +37,7 @@ import {
 } from "./lib";
 import { toSharedBattleData } from "./shared-battle";
 import { PROVIDERS, PROVIDER_IDS, priceFor } from "./providers/registry";
+import { localEndpointBlockReason, localFetchInit } from "./providers/local-endpoint";
 import { SSEDecoder, type SSEEvent } from "./providers/sse";
 import type { ModelInfo, ProviderId, UsageInfo } from "./providers/types";
 import { play } from "cuelume";
@@ -313,6 +314,21 @@ PROVIDER_IDS.forEach((p) => {
 /* ===================================================================== */
 /*  MODELS — per-provider catalogs, provider-tabbed picker, chips        */
 /* ===================================================================== */
+/**
+ * `fetch` rejects with a bare "Failed to fetch" whether the browser refused the
+ * request (CORS, mixed content, local network permission) or the server never
+ * answered — name the likely cause instead of guessing CORS every time.
+ */
+function blockedMessage(p: ProviderId): string {
+  if (p !== "local") {
+    return `Browser access to ${PROVIDERS[p].name} was blocked (likely CORS). Use this model through OpenRouter.`;
+  }
+  return (
+    localEndpointBlockReason(keyFor("local")) ??
+    "The local server did not answer. Check that it is running and that it allows CORS from this origin."
+  );
+}
+
 async function loadProviderModels(p: ProviderId) {
   const prov = PROVIDERS[p];
   if (!hasCreds(p)) {
@@ -328,7 +344,9 @@ async function loadProviderModels(p: ProviderId) {
     // is needed to list local models anyway.
     const res = await fetch(
       modelsUrlFor(p),
-      p !== "local" ? { headers: prov.headers(keyFor(p)) } : {},
+      p !== "local"
+        ? { headers: prov.headers(keyFor(p)) }
+        : localFetchInit(keyFor("local")),
     );
     if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
     const json = await res.json();
@@ -337,12 +355,7 @@ async function loadProviderModels(p: ProviderId) {
   } catch (error) {
     providerModels[p] = [];
     const message = error instanceof Error ? error.message : "Request failed";
-    providerErrors.set(
-      p,
-      message === "Failed to fetch"
-        ? "Browser access was blocked (likely CORS). Use this model through OpenRouter."
-        : message,
-    );
+    providerErrors.set(p, message === "Failed to fetch" ? blockedMessage(p) : message);
   }
   loadedProviders.add(p);
   renderChips(); // names may have resolved
@@ -1273,6 +1286,7 @@ async function callModel(entry: Entry) {
   controllers.set(entry.key, controller);
   try {
     const res = await fetch(chatUrlFor(entry.provider), {
+      ...(entry.provider === "local" ? localFetchInit(key) : {}),
       method: "POST",
       headers: prov.headers(key),
       body: JSON.stringify(prov.body(entry.id, usedSystem, usedPrompt)),
@@ -1416,7 +1430,7 @@ async function callModel(entry: Entry) {
     const message = err instanceof Error ? err.message : "Request failed.";
     entry.error =
       message === "Failed to fetch"
-        ? `Browser access to ${prov.name} was blocked (likely CORS). Try the same model through OpenRouter.`
+        ? blockedMessage(entry.provider)
         : message === "This operation was aborted"
           ? "Request cancelled."
           : message;

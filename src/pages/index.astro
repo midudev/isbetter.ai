@@ -339,7 +339,7 @@ const PROMPT_EXAMPLES = [
 							<p class="mt-1 text-[10px] leading-relaxed text-[var(--color-ink-faint)]">{provider.credentialHelp}</p>
 						)}
 						{provider.id === "local" && (
-							<p class="mt-1 text-[10px] leading-relaxed text-[var(--color-ink-faint)]">Make sure your local server has CORS enabled.</p>
+							<p class="mt-1 text-[10px] leading-relaxed text-[var(--color-ink-faint)]">Make sure your local server has CORS enabled. A LAN or VPN address (<code>http://192.168.1.20:8080/v1</code>) also needs the browser's local network permission, or https on the server.</p>
 						)}
 					</div>
 				))}
