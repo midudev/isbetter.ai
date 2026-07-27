@@ -197,6 +197,19 @@ const bearerHeaders = (key: string) => ({
   "Content-Type": "application/json",
 });
 
+/** Anthropic requires max_tokens; prefer each model's documented output ceiling. */
+export function anthropicMaxOutput(model: string): number {
+  const id = model.toLowerCase();
+  // Legacy Haiku 3.x — hard 8k ceiling.
+  if (/haiku-3|claude-3(?:-5)?-haiku/.test(id)) return 8192;
+  // Early Opus 4 / Opus 4.1 — 32k.
+  if (/claude-opus-4-1(?:-|$)/.test(id) || /claude-opus-4(?:-20|$)/.test(id)) return 32_000;
+  // Fable / Mythos / Opus·Sonnet 5 / Opus 4.6+ / Sonnet 4.6 — 128k.
+  if (/fable|mythos|opus-5|sonnet-5|opus-4-[6-9]|sonnet-4-6/.test(id)) return 128_000;
+  // Opus 4.5, Sonnet 4.5, Haiku 4.5, Sonnet 4, etc. — 64k.
+  return 64_000;
+}
+
 const openAIBody = (includeUsage = false) => (model: string, system: string, user: string) => ({
   model,
   messages: [
@@ -304,7 +317,7 @@ export const PROVIDERS: Record<ProviderId, Provider> = {
     }),
     body: (model, system, user) => ({
       model,
-      max_tokens: model.toLowerCase().startsWith("claude-fable-5") ? 16384 : 8192,
+      max_tokens: anthropicMaxOutput(model),
       system,
       messages: [{ role: "user", content: user }],
       stream: true,

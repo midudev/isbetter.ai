@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  anthropicMaxOutput,
   parseAnthropicChunk,
   parseOpenAIChunk,
   priceFor,
@@ -27,11 +28,22 @@ describe("provider registry", () => {
     expect(PROVIDERS.kimi.keyUrl).toContain("platform.kimi.ai");
     expect(PROVIDERS.google.chatUrl).toContain("/openai/chat/completions");
     expect(PROVIDERS.anthropic.body("claude-fable-5", "", "")).toMatchObject({
-      max_tokens: 16384,
+      max_tokens: 128_000,
     });
     expect(PROVIDERS.anthropic.body("claude-opus-4-8", "", "")).toMatchObject({
-      max_tokens: 8192,
+      max_tokens: 128_000,
     });
+    expect(PROVIDERS.anthropic.body("claude-sonnet-4-5", "", "")).toMatchObject({
+      max_tokens: 64_000,
+    });
+  });
+
+  it("picks Anthropic max_tokens from each model family", () => {
+    expect(anthropicMaxOutput("claude-3-5-haiku-20241022")).toBe(8192);
+    expect(anthropicMaxOutput("claude-opus-4-20250514")).toBe(32_000);
+    expect(anthropicMaxOutput("claude-opus-4-1")).toBe(32_000);
+    expect(anthropicMaxOutput("claude-haiku-4-5")).toBe(64_000);
+    expect(anthropicMaxOutput("claude-sonnet-5")).toBe(128_000);
   });
 
   it("normalizes OpenAI-compatible content, reasoning and usage", () => {
