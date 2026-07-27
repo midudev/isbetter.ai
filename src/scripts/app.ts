@@ -758,10 +758,7 @@ function refreshBlindUI() {
   els.blindBtn.setAttribute("aria-pressed", String(blindMode));
   refreshToggleCheck(els.blindCheck, blindMode);
   els.blindBtn.disabled = running;
-  const complete =
-    entries.size > 0 &&
-    [...entries.values()].every((entry) => entry.state === "done" || entry.state === "error");
-  const canToggleReveal = blindMode && complete && !running;
+  const canToggleReveal = blindMode && entries.size > 0;
   els.revealBtn.classList.toggle("hidden", !canToggleReveal);
   els.revealBtn.classList.toggle("flex", canToggleReveal);
   els.revealBtn.setAttribute("aria-pressed", String(revealed));
