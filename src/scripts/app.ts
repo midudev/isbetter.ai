@@ -264,12 +264,27 @@ const els = {
 /* ===================================================================== */
 const anyKey = () => PROVIDER_IDS.some((p) => keyFor(p).trim());
 let dialogReturnFocus: HTMLElement | null = null;
+function reorderProviderTabs() {
+  // Keep "All" first; configured providers next, then the rest (stable order).
+  const tablist = els.dropdown.querySelector('[role="tablist"]');
+  if (!tablist) return;
+  const ordered = [
+    ...PROVIDER_IDS.filter(hasCreds),
+    ...PROVIDER_IDS.filter((p) => !hasCreds(p)),
+  ];
+  for (const id of ordered) {
+    const tab = tablist.querySelector(`[data-provtab="${id}"]`);
+    if (tab) tablist.appendChild(tab);
+  }
+}
+
 function refreshKeyUI() {
   const has = anyKey();
   els.keyDot.style.background = has ? "var(--color-ink-faint)" : "var(--color-accent)";
   els.keyDot.classList.toggle("animate-pulse", !has);
   for (const p of PROVIDER_IDS)
     $(`[data-provider-ready="${p}"]`)?.classList.toggle("hidden", !hasCreds(p));
+  reorderProviderTabs();
 }
 function openKeyModal(message = "") {
   dialogReturnFocus = document.activeElement as HTMLElement | null;
