@@ -1,5 +1,6 @@
 /* =========================================================================
-   /battle?id=… — read-only review of a saved battle from localStorage.
+   /battle?id=… — review of a saved battle from localStorage (or a public share).
+   Local battles allow editing code and saving it back to history.
    ========================================================================= */
 import {
   $,
@@ -141,6 +142,20 @@ async function initBattle(b: Battle) {
     saveHistory(history);
   }
 
+  function persistResultCode(resultKey: string, code: string) {
+    if (isPublicBattle) return false;
+    const history = loadHistory();
+    const saved = history.find((item) => item.id === b.id || item.ts === b.ts);
+    if (!saved) return false;
+    const result = saved.results.find(
+      (item) => (item.key || `${item.provider || "openrouter"}::${item.id}`) === resultKey,
+    );
+    if (!result) return false;
+    result.code = code;
+    saveHistory(history);
+    return true;
+  }
+
   function setBlindEnabled(next: boolean) {
     if (next) {
       b.blind = enableBlind();
@@ -231,6 +246,7 @@ async function initBattle(b: Battle) {
             {
               deferPreview:
                 isPublicBattle && !activatedPreviews.has(keyOf(v)),
+              editable: !isPublicBattle,
             },
           );
     const content =
@@ -384,18 +400,65 @@ async function initBattle(b: Battle) {
   });
 
   /* per-card actions ---------------------------------------------------- */
+  results.addEventListener("input", (e) => {
+    const ta = (e.target as HTMLElement).closest(
+      "textarea[data-code-edit]",
+    ) as HTMLTextAreaElement | null;
+    if (!ta) return;
+    const v = views.find((x) => keyOf(x) === ta.dataset.model);
+    if (!v) return;
+    const saveBtn = ta
+      .closest("[data-code-editor]")
+      ?.querySelector<HTMLButtonElement>('[data-action="save-code"]');
+    if (saveBtn) saveBtn.hidden = ta.value === v.code;
+  });
+
+  results.addEventListener("keydown", (e) => {
+    if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== "s") return;
+    const ta = (e.target as HTMLElement).closest(
+      "textarea[data-code-edit]",
+    ) as HTMLTextAreaElement | null;
+    if (!ta) return;
+    e.preventDefault();
+    ta.closest("[data-code-editor]")
+      ?.querySelector<HTMLButtonElement>('[data-action="save-code"]')
+      ?.click();
+  });
+
   results.addEventListener("click", async (e) => {
     const btn = (e.target as HTMLElement).closest("[data-action]") as HTMLElement;
     if (!btn) return;
     const v = views.find((x) => keyOf(x) === btn.dataset.model);
     if (!v) return;
-    if (btn.dataset.action === "copy" && v.code) {
-      await navigator.clipboard.writeText(v.code);
+    if (btn.dataset.action === "copy") {
+      const editor = btn
+        .closest("[data-code-editor]")
+        ?.querySelector<HTMLTextAreaElement>("textarea[data-code-edit]");
+      const text = editor?.value ?? v.code;
+      if (!text) return;
+      await navigator.clipboard.writeText(text);
       play("success");
       const sp = btn.querySelector("span");
       if (sp) {
         const prev = sp.textContent;
         sp.textContent = "copied";
+        setTimeout(() => (sp.textContent = prev), 1200);
+      }
+    } else if (btn.dataset.action === "save-code") {
+      const editor = btn
+        .closest("[data-code-editor]")
+        ?.querySelector<HTMLTextAreaElement>("textarea[data-code-edit]");
+      if (!editor) return;
+      const next = editor.value;
+      if (!persistResultCode(keyOf(v), next)) return;
+      v.code = next;
+      v.codeHtml = next ? highlightCode(next) : "";
+      btn.hidden = true;
+      play("success");
+      const sp = btn.querySelector("span");
+      if (sp) {
+        const prev = sp.textContent;
+        sp.textContent = "Saved";
         setTimeout(() => (sp.textContent = prev), 1200);
       }
     } else if (btn.dataset.action === "run-preview" && v.code) {

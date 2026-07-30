@@ -459,7 +459,7 @@ export function restartPreview(frame: HTMLIFrameElement): void {
 export function doneContentHTML(
   r: ResultView,
   viewMode: ViewMode,
-  options: { deferPreview?: boolean } = {},
+  options: { deferPreview?: boolean; editable?: boolean } = {},
 ): string {
   const resultKey = r.key || r.id;
   if (viewMode === "preview") {
@@ -480,6 +480,21 @@ export function doneContentHTML(
     return previewIframeHTML(r, resultKey);
   }
   if (viewMode === "code") {
+    if (!r.code && !options.editable) return placeholderHTML("i-code", "no code block found");
+    if (options.editable) {
+      return `
+        <div data-code-editor class="relative h-full">
+          <div class="absolute right-2 top-2 z-10 flex items-center gap-1.5">
+            <button type="button" data-action="save-code" data-model="${esc(resultKey)}" hidden aria-label="Save code" class="flex items-center gap-1 rounded-md border border-[var(--color-accent)]/40 bg-[var(--color-accent)] px-2 py-1 text-[10px] font-medium text-black transition-opacity hover:opacity-90">
+              ${svg("i-check", "size-3.5")}<span>Save</span>
+            </button>
+            <button type="button" data-action="copy" data-model="${esc(resultKey)}" aria-label="Copy generated code" aria-live="polite" class="flex items-center gap-1 rounded-md border border-[var(--color-line)] bg-[var(--color-panel)]/90 px-2 py-1 text-[10px] text-[var(--color-ink-dim)] backdrop-blur transition-colors hover:text-[var(--color-ink)]">
+              ${svg("i-copy", "size-3.5")}<span>copy</span>
+            </button>
+          </div>
+          <textarea data-code-edit data-model="${esc(resultKey)}" spellcheck="false" class="result-scroll h-full w-full resize-none border-0 bg-transparent p-4 pr-24 font-[family-name:var(--font-code)] text-[11px] leading-[1.6] text-[var(--color-ink)] outline-none placeholder:text-[var(--color-ink-faint)]" placeholder="Paste or edit the HTML demo…">${esc(r.code)}</textarea>
+        </div>`;
+    }
     if (!r.code) return placeholderHTML("i-code", "no code block found");
     return `
       <div class="relative h-full">

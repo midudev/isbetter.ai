@@ -8,7 +8,7 @@ const TOGGLE =
   "#add-model-btn, #sys-toggle, #scroll-link-btn, #blind-mode-btn, #share-public-btn, .view-tab, [data-provtab], [data-add]";
 const SPARKLE =
   "#sys-reset, #rerun-all-btn, [data-prompt-example], [data-action='rerun'], [data-action='reload-preview'], [data-action='view-code']";
-const SUCCESS = "#key-save, [data-action='copy']";
+const SUCCESS = "#key-save, [data-action='copy'], [data-action='save-code']";
 
 function setCue(element: Element, attribute: string, sound?: string) {
   if (!element.hasAttribute(attribute)) element.setAttribute(attribute, sound || "");

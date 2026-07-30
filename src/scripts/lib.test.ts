@@ -101,6 +101,26 @@ describe("result extraction", () => {
     expect(html).toContain('data-action="view-code"');
     expect(html).toContain("View code");
   });
+
+  it("renders an editable code pane with a hidden Save control", () => {
+    const html = doneContentHTML(
+      {
+        id: "gpt",
+        key: "openai::gpt",
+        raw: "",
+        code: "<!doctype html><html><body>hi</body></html>",
+        codeHtml: "",
+      },
+      "code",
+      { editable: true },
+    );
+    expect(html).toContain('data-code-editor');
+    expect(html).toContain("textarea");
+    expect(html).toContain('data-action="save-code"');
+    expect(html).toContain(" hidden ");
+    expect(html).toContain("&lt;!doctype html&gt;");
+    expect(html).not.toContain("code-block");
+  });
 });
 
 describe("preview hardening", () => {
