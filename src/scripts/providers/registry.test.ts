@@ -87,6 +87,14 @@ describe("provider registry", () => {
       completion: 0.28 / 1e6,
     });
     expect(priceFor("anthropic", "claude-fable-5")).toEqual({
+      prompt: 10 / 1e6,
+      completion: 50 / 1e6,
+    });
+    expect(priceFor("anthropic", "claude-opus-5")).toEqual({
+      prompt: 5 / 1e6,
+      completion: 25 / 1e6,
+    });
+    expect(priceFor("anthropic", "claude-opus-4-8")).toEqual({
       prompt: 5 / 1e6,
       completion: 25 / 1e6,
     });
