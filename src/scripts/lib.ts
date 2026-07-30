@@ -260,23 +260,23 @@ function numberedCodeHTML(highlighted: string): string {
 // is cross-origin and inaccessible. Everything else (CSP, nav guard, allow=)
 // is defense in depth around that boundary.
 //
-// Interactive demos still need JS. We keep them useful (inline scripts/styles,
-// data: assets) while blocking network I/O, form exfil, nested frames, and
-// escaping the preview chrome.
+// Interactive demos still need JS. External CDN scripts (three.js, etc.) are
+// allowed over https/http, while form exfil, nested frames, plugins, and base
+// tag hijacks stay blocked. Opaque-origin sandbox still protects parent storage.
 export const PREVIEW_CSP = [
   "default-src 'none'",
-  "script-src 'unsafe-inline'",
-  "style-src 'unsafe-inline'",
-  "img-src data: blob:",
-  "font-src data:",
-  "media-src data: blob:",
-  "connect-src 'none'",
+  "script-src 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' https: http: blob:",
+  "style-src 'unsafe-inline' https: http:",
+  "img-src data: blob: https: http:",
+  "font-src data: https: http:",
+  "media-src data: blob: https: http:",
+  "connect-src https: http: ws: wss: blob:",
   "form-action 'none'",
   "frame-src 'none'",
   "child-src 'none'",
   "object-src 'none'",
   "base-uri 'none'",
-  "worker-src 'none'",
+  "worker-src blob: https: http:",
   "manifest-src 'none'",
 ].join("; ");
 
@@ -455,7 +455,7 @@ export function doneContentHTML(
             ${svg("i-alert", "size-7 text-[var(--color-ink-faint)]")}
             <div>
               <p class="text-[13px] font-medium text-[var(--color-ink)]">This public preview contains untrusted code</p>
-              <p class="mt-1 text-[11px] leading-relaxed text-[var(--color-ink-faint)]">It runs offline in a restricted sandbox only after you approve it.</p>
+              <p class="mt-1 text-[11px] leading-relaxed text-[var(--color-ink-faint)]">It runs in a restricted sandbox (opaque origin) only after you approve it. External CDN scripts may load.</p>
             </div>
             <button data-action="run-preview" data-model="${esc(resultKey)}" class="mt-1 rounded-lg bg-[var(--color-accent)] px-4 py-2 text-[12px] font-medium text-black transition-opacity hover:opacity-90">Run preview</button>
           </div>

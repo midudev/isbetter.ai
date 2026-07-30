@@ -23,15 +23,27 @@ describe("scanCodeWithRules", () => {
     expect(rulesAloneBlock(scan)).toBe(false);
   });
 
-  it("flags eval and remote scripts as critical and hard-blocks", () => {
+  it("flags eval as critical and hard-blocks", () => {
     const scan = scanCodeWithRules(
-      `<script src="https://evil.example/x.js"></script><script>eval(userInput)</script>`,
+      `<script src="https://cdn.example/three.min.js"></script><script>eval(userInput)</script>`,
     );
     expect(scan.findings.some((f) => f.type === "dynamic_execution")).toBe(true);
+    // CDN script tags are allowed (three.js and similar demos).
     expect(scan.findings.some((f) => f.type === "remote_script_loading")).toBe(
-      true,
+      false,
     );
     expect(rulesAloneBlock(scan)).toBe(true);
+  });
+
+  it("allows CDN library script tags without findings", () => {
+    const scan = scanCodeWithRules(
+      `<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"}}</script>
+       <script type="module">import * as THREE from "three";</script>`,
+    );
+    expect(scan.findings.some((f) => f.type === "remote_script_loading")).toBe(
+      false,
+    );
+    expect(rulesAloneBlock(scan)).toBe(false);
   });
 
   it("flags document.cookie theft patterns", () => {

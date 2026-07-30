@@ -30,9 +30,8 @@ Detect behaviors such as:
 - credential, cookie or token theft
 - data exfiltration
 - keylogging or form interception
-- remote script loading
 - obfuscated dynamic execution
-- eval, Function or similar execution
+- eval, Function or similar execution used for abuse
 - malicious redirects
 - cryptomining
 - persistence mechanisms
@@ -40,7 +39,8 @@ Detect behaviors such as:
 - browser or extension API abuse
 
 Do not classify code as malicious merely because it uses fetch, storage,
-cookies or event listeners. Consider its complete behavior and intent.
+cookies, event listeners, or loads libraries from CDNs (e.g. three.js,
+charting libs). Consider its complete behavior and intent.
 
 Return only valid JSON:
 {

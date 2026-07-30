@@ -1,8 +1,9 @@
 # connect-src has to stay scheme-wide: the "Local" provider points at whatever
 # OpenAI-compatible server the user runs — a LAN IP, a VPN host, a tunnel — and
 # CSP cannot express "any private address". Model-generated code never runs on
-# this origin: preview documents get their own strict policy (connect-src
-# 'none') plus a sandboxed iframe, see PREVIEW_CSP in src/scripts/lib.ts.
+# this origin: preview documents get their own PREVIEW_CSP (CDN scripts/assets
+# allowed; form-action/frames locked) plus a sandboxed iframe — see
+# PREVIEW_CSP in src/scripts/lib.ts.
 /*
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin

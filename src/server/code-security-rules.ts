@@ -35,20 +35,6 @@ export const SECURITY_RULES: RuleMatch[] = [
     explanation: "Schedules a string as code via setTimeout/setInterval.",
   },
   {
-    type: "remote_script_loading",
-    severity: "critical",
-    pattern:
-      /<script\b[^>]*\bsrc\s*=\s*["'](?:https?:)?\/\/[^"']+["'][^>]*>/i,
-    explanation: "Loads a remote script, which can bypass preview isolation intent.",
-  },
-  {
-    type: "remote_script_loading",
-    severity: "high",
-    pattern:
-      /\bimport\s*\(\s*['"`](?:https?:)?\/\/[^'"`]+['"`]\s*\)|\bimportScripts\s*\(/i,
-    explanation: "Dynamically imports or importScripts remote/untrusted code.",
-  },
-  {
     type: "credential_theft",
     severity: "critical",
     pattern: /\bdocument\.cookie\b/i,

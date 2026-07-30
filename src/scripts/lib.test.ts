@@ -112,15 +112,18 @@ describe("preview hardening", () => {
     expect(PREVIEW_SANDBOX).not.toContain("allow-same-origin");
   });
 
-  it("injects a strict CSP and strips navigation gadgets", () => {
+  it("injects CSP (CDN scripts allowed) and strips navigation gadgets", () => {
     const hardened = hardenPreviewDocument(
       `<!doctype html><html><head><base href="https://evil.test/"><meta http-equiv="refresh" content="0;url=https://evil.test"><link rel="dns-prefetch" href="//evil.test"><link rel="preconnect stylesheet" href="https://evil.test/x.css"></head><body><map><area href="https://evil.test/phish"></map><img src="https://evil.test/t.gif"><script>fetch("https://evil.test")</script></body></html>`,
       { bridgeId: "model-a" },
     );
 
     expect(hardened).toContain(`content="${PREVIEW_CSP}"`);
-    expect(hardened).toContain("connect-src 'none'");
+    expect(PREVIEW_CSP).toContain("script-src");
+    expect(PREVIEW_CSP).toMatch(/script-src[^;]*https:/);
+    expect(PREVIEW_CSP).toMatch(/connect-src[^;]*https:/);
     expect(hardened).toContain("manifest-src 'none'");
+    expect(hardened).toContain("form-action 'none'");
     expect(hardened).toContain("background:#080a08");
     expect(hardened).not.toMatch(/<base\b/i);
     expect(hardened).not.toMatch(/<area\b/i);

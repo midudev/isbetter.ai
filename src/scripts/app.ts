@@ -51,10 +51,10 @@ Respond in TWO parts, in this exact order:
 
 2. The complete solution as ONE self-contained HTML document inside a single \`\`\`html fenced code block. This document MUST:
    - Start with <!doctype html> and include <html>, <head> and <body>.
-   - Put ALL CSS inside one <style> tag in the <head>.
-   - Put ALL JavaScript inside one <script> tag (vanilla JS, no build step, no frameworks).
-   - Make NO network requests: no CDNs, no imports, no external fonts, images or scripts. It must run fully offline inside a sandboxed iframe with a strict CSP (external URLs and fetch are blocked).
-   - Use inline SVG instead of icon fonts/libraries. Use data: URIs only if an image is truly required.
+   - Prefer CSS in one <style> tag in the <head> (external stylesheets from trusted CDNs are fine when needed).
+   - Prefer JavaScript in <script> tags (vanilla JS, no build step). You MAY load libraries from reputable CDNs (e.g. three.js, p5.js, charting libs via jsDelivr, unpkg, esm.sh, cdnjs) with <script src="…"> or ES module imports.
+   - Keep network usage limited to loading those libraries and any assets the demo truly needs (textures, fonts, images). Prefer data: URIs for small assets when practical.
+   - Use inline SVG instead of icon fonts when a simple icon is enough.
    - Be polished, responsive, accessible and immediately runnable.
 
 Output ONLY the short answer followed by the single \`\`\`html block. Write nothing after the closing fence.`;
