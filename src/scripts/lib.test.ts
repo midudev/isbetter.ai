@@ -112,6 +112,18 @@ describe("preview hardening", () => {
     expect(PREVIEW_SANDBOX).not.toContain("allow-same-origin");
   });
 
+  it("shims localStorage before demo scripts so sandboxed previews do not throw", () => {
+    const hardened = hardenPreviewDocument(
+      `<!doctype html><html><body><script>localStorage.setItem("x","1")</script></body></html>`,
+    );
+    const shimAt = hardened.indexOf('install("localStorage"');
+    const demoAt = hardened.indexOf('localStorage.setItem("x","1")');
+    expect(shimAt).toBeGreaterThan(-1);
+    expect(demoAt).toBeGreaterThan(-1);
+    expect(shimAt).toBeLessThan(demoAt);
+    expect(hardened).toContain('install("sessionStorage"');
+  });
+
   it("injects CSP (CDN scripts allowed) and strips navigation gadgets", () => {
     const hardened = hardenPreviewDocument(
       `<!doctype html><html><head><base href="https://evil.test/"><meta http-equiv="refresh" content="0;url=https://evil.test"><link rel="dns-prefetch" href="//evil.test"><link rel="preconnect stylesheet" href="https://evil.test/x.css"></head><body><map><area href="https://evil.test/phish"></map><img src="https://evil.test/t.gif"><script>fetch("https://evil.test")</script></body></html>`,
@@ -172,7 +184,7 @@ describe("preview hardening", () => {
 
     expect(html).toContain(`sandbox="${PREVIEW_SANDBOX}"`);
     expect(html).toContain(`src="${PREVIEW_FRAME_PATH}"`);
-    expect(html).toContain('data-preview-source');
+    expect(html).toContain("<textarea hidden data-preview-source>");
     expect(html).toContain(`allow="${PREVIEW_ALLOW}"`);
     expect(html).toContain('referrerpolicy="no-referrer"');
     expect(html).not.toContain("allow-same-origin");
@@ -182,6 +194,9 @@ describe("preview hardening", () => {
     expect(html).toContain("Content-Security-Policy");
     expect(html).toContain("bg-[var(--color-surface)] opacity-0");
     expect(html).toContain("transition-opacity duration-300");
+    // Demo HTML is entity-escaped inside the textarea (safe for innerHTML).
+    expect(html).toContain("&lt;!DOCTYPE html&gt;");
+    expect(html).not.toMatch(/<textarea[^>]*>\s*<!DOCTYPE/i);
   });
 
   it("opens new-tab previews via a CSP-free wrapper and nested opaque iframe", () => {
