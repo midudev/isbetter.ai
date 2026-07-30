@@ -101,7 +101,7 @@ const OPENAI_PRICES: PriceRow[] = [
 ];
 
 const ANTHROPIC_PRICES: PriceRow[] = [
-  ["claude-fable-5", 10, 50],
+  ["claude-fable-5", 5, 25],
   ["claude-opus-4-8", 5, 25],
   ["claude-opus-4-7", 5, 25],
   ["claude-opus-4-6", 5, 25],
