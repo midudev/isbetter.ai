@@ -13,9 +13,9 @@ export default defineConfig({
     service: passthroughImageService(),
   },
   // CSP is delivered via public/_headers (HTTP), not Astro's meta CSP.
-  // srcdoc/blob preview iframes inherit the parent policy; hashed script/style
-  // sources would block the demos' required inline JS/CSS. Preview documents
-  // still enforce their own PREVIEW_CSP (CDN scripts allowed; forms/frames locked).
+  // srcdoc/blob preview iframes inherit + intersect the parent policy, so the
+  // header CSP must allow demo CDN/inline sources; hashed script/style would
+  // block them. Preview documents still add PREVIEW_CSP (forms/frames locked).
   vite: {
     plugins: [tailwindcss()]
   }

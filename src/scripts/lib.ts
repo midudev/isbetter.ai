@@ -287,22 +287,13 @@ export const PREVIEW_CSP = [
  */
 export const PREVIEW_SANDBOX = "allow-scripts";
 
-/** CSP for the blob "open in new tab" wrapper. No scripts in the wrapper
- *  itself (blob pages inherit the app origin and could otherwise touch
- *  localStorage). frame-src stays open so the nested srcdoc iframe can load;
- *  that iframe is what carries PREVIEW_SANDBOX / PREVIEW_CSP. */
-export const PREVIEW_WRAPPER_CSP = [
-  "default-src 'none'",
-  "script-src 'none'",
-  "style-src 'unsafe-inline'",
-  "frame-src 'self'",
-  "child-src 'self'",
-  "object-src 'none'",
-  "base-uri 'none'",
-  "form-action 'none'",
-  "connect-src 'none'",
-  "worker-src 'none'",
-].join("; ");
+// Blob "open in new tab" wrappers must NOT set a restrictive CSP.
+// srcdoc/blob iframes inherit the parent document's CSP and intersect it with
+// their own — a wrapper `script-src 'none'` would kill every demo script
+// (nav guard, scroll bridge, and the model's code). The wrapper HTML is fully
+// controlled (user content only appears inside an escaped srcdoc); the nested
+// iframe stays sandboxed without allow-same-origin so it cannot read
+// localStorage / API keys.
 
 const PREVIEW_FALLBACK_BACKGROUND = "#080a08";
 
@@ -382,15 +373,18 @@ export function hardenPreviewDocument(
 
 /**
  * Blob-tab shell around untrusted HTML. The wrapper is same-origin with the
- * app (blob: inherits creator origin), so it must not run any script — only a
- * nested opaque-origin iframe may execute the demo.
+ * app (blob: inherits creator origin) and intentionally has no CSP — srcdoc
+ * children inherit parent CSP, so a wrapper `script-src 'none'` would block
+ * every demo script. It contains no scripts of its own; only the nested
+ * opaque-origin iframe (sandbox without allow-same-origin) may execute the
+ * demo under PREVIEW_CSP.
  */
 export function hardenedPreviewWrapperHTML(
   code: string,
   title = "AI Battle preview",
 ): string {
   const inner = hardenPreviewDocument(code);
-  return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${PREVIEW_WRAPPER_CSP}"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title><style>html,body{margin:0;height:100%;background:${PREVIEW_FALLBACK_BACKGROUND}}iframe{display:block;width:100%;height:100%;border:0;background:${PREVIEW_FALLBACK_BACKGROUND}}</style></head><body><iframe sandbox="${PREVIEW_SANDBOX}" csp="${esc(PREVIEW_CSP)}" allow="${PREVIEW_ALLOW}" referrerpolicy="no-referrer" srcdoc="${esc(inner)}" title="${esc(title)}"></iframe></body></html>`;
+  return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title><style>html,body{margin:0;height:100%;background:${PREVIEW_FALLBACK_BACKGROUND}}iframe{display:block;width:100%;height:100%;border:0;background:${PREVIEW_FALLBACK_BACKGROUND}}</style></head><body><iframe sandbox="${PREVIEW_SANDBOX}" csp="${esc(PREVIEW_CSP)}" allow="${PREVIEW_ALLOW}" referrerpolicy="no-referrer" srcdoc="${esc(inner)}" title="${esc(title)}"></iframe></body></html>`;
 }
 
 /**

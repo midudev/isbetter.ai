@@ -14,7 +14,6 @@ import {
   PREVIEW_ALLOW,
   PREVIEW_CSP,
   PREVIEW_SANDBOX,
-  PREVIEW_WRAPPER_CSP,
   renderBattleInsights,
   renderMetricsTimeline,
   saveHistory,
@@ -182,14 +181,16 @@ describe("preview hardening", () => {
     expect(html).toContain("transition-opacity duration-300");
   });
 
-  it("opens new-tab previews via a scriptless wrapper and nested opaque iframe", () => {
+  it("opens new-tab previews via a CSP-free wrapper and nested opaque iframe", () => {
     const wrapper = hardenedPreviewWrapperHTML(
       `<!doctype html><html><body><script>parent.localStorage.getItem("ab:key:openai")</script></body></html>`,
       'Title <">&',
     );
 
-    expect(wrapper).toContain(`content="${PREVIEW_WRAPPER_CSP}"`);
-    expect(wrapper).toContain("script-src 'none'");
+    // No wrapper CSP: srcdoc inherits parent policy, so script-src 'none'
+    // would block the demo. Isolation is the nested sandbox (opaque origin).
+    expect(wrapper).not.toMatch(/http-equiv="Content-Security-Policy"/i);
+    expect(wrapper).not.toContain("script-src 'none'");
     expect(wrapper).toContain(`sandbox="${PREVIEW_SANDBOX}"`);
     expect(wrapper).not.toContain("allow-same-origin");
     expect(wrapper).toContain("Title &lt;&quot;&gt;&amp;");
@@ -198,6 +199,9 @@ describe("preview hardening", () => {
     expect(srcdocMatch).toBeTruthy();
     expect(srcdocMatch![1]).toContain("localStorage.getItem");
     expect(wrapper.replace(srcdocMatch![0], "")).not.toContain("localStorage");
+    // Nested preview still carries its own PREVIEW_CSP via meta + csp attr.
+    expect(srcdocMatch![1]).toContain("Content-Security-Policy");
+    expect(wrapper).toContain('csp="default-src &#39;none&#39;');
   });
 
   it("does not create an iframe until a deferred public preview is approved", () => {
