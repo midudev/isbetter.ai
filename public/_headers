@@ -2,10 +2,10 @@
 # OpenAI-compatible server the user runs — a LAN IP, a VPN host, a tunnel — and
 # CSP cannot express "any private address".
 #
-# Preview iframes use srcdoc, which INHERITS and INTERSECTS this policy with
-# PREVIEW_CSP. Sources here must therefore be a superset of what demos need
-# (CDN scripts/styles/assets, workers, wasm). Model code still runs only inside
-# a sandboxed opaque-origin iframe — see PREVIEW_CSP in src/scripts/lib.ts.
+# Keep in sync with SITE_CSP in src/scripts/preview-security.ts (also applied
+# by src/middleware.ts for SSR / local dev). In-app demos load /preview-frame
+# with PREVIEW_CSP; SITE_CSP must still allow CDN sources for open-in-tab
+# srcdoc wrappers that inherit the parent policy.
 /*
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin

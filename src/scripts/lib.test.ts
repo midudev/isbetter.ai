@@ -13,6 +13,7 @@ import {
   hardenedPreviewWrapperHTML,
   PREVIEW_ALLOW,
   PREVIEW_CSP,
+  PREVIEW_FRAME_PATH,
   PREVIEW_SANDBOX,
   renderBattleInsights,
   renderMetricsTimeline,
@@ -170,12 +171,14 @@ describe("preview hardening", () => {
     );
 
     expect(html).toContain(`sandbox="${PREVIEW_SANDBOX}"`);
-    expect(html).toContain('csp="default-src &#39;none&#39;');
+    expect(html).toContain(`src="${PREVIEW_FRAME_PATH}"`);
+    expect(html).toContain('data-preview-source');
     expect(html).toContain(`allow="${PREVIEW_ALLOW}"`);
     expect(html).toContain('referrerpolicy="no-referrer"');
     expect(html).not.toContain("allow-same-origin");
     expect(html).not.toContain("allow-modals");
     expect(html).not.toContain("allow-forms");
+    expect(html).not.toContain("srcdoc=");
     expect(html).toContain("Content-Security-Policy");
     expect(html).toContain("bg-[var(--color-surface)] opacity-0");
     expect(html).toContain("transition-opacity duration-300");
@@ -199,9 +202,10 @@ describe("preview hardening", () => {
     expect(srcdocMatch).toBeTruthy();
     expect(srcdocMatch![1]).toContain("localStorage.getItem");
     expect(wrapper.replace(srcdocMatch![0], "")).not.toContain("localStorage");
-    // Nested preview still carries its own PREVIEW_CSP via meta + csp attr.
+    // Nested preview still carries its own PREVIEW_CSP via meta (HTML-escaped).
     expect(srcdocMatch![1]).toContain("Content-Security-Policy");
-    expect(wrapper).toContain('csp="default-src &#39;none&#39;');
+    expect(srcdocMatch![1]).toContain("script-src &#39;unsafe-inline&#39;");
+    expect(srcdocMatch![1]).toContain("https: http: blob:");
   });
 
   it("does not create an iframe until a deferred public preview is approved", () => {

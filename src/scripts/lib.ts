@@ -8,6 +8,20 @@ import {
   downsampleMetricSamples,
   type MetricSample,
 } from "./metrics";
+import {
+  PREVIEW_ALLOW,
+  PREVIEW_CSP,
+  PREVIEW_FRAME_PATH,
+  PREVIEW_SANDBOX,
+} from "./preview-security";
+
+export {
+  PREVIEW_ALLOW,
+  PREVIEW_CSP,
+  PREVIEW_FRAME_PATH,
+  PREVIEW_SANDBOX,
+  SITE_CSP,
+} from "./preview-security";
 
 export {
   MAX_METRIC_SAMPLES,
@@ -260,62 +274,14 @@ function numberedCodeHTML(highlighted: string): string {
 // is cross-origin and inaccessible. Everything else (CSP, nav guard, allow=)
 // is defense in depth around that boundary.
 //
-// Interactive demos still need JS. External CDN scripts (three.js, etc.) are
-// allowed over https/http, while form exfil, nested frames, plugins, and base
-// tag hijacks stay blocked. Opaque-origin sandbox still protects parent storage.
-export const PREVIEW_CSP = [
-  "default-src 'none'",
-  "script-src 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' https: http: blob:",
-  "style-src 'unsafe-inline' https: http:",
-  "img-src data: blob: https: http:",
-  "font-src data: https: http:",
-  "media-src data: blob: https: http:",
-  "connect-src https: http: ws: wss: blob:",
-  "form-action 'none'",
-  "frame-src 'none'",
-  "child-src 'none'",
-  "object-src 'none'",
-  "base-uri 'none'",
-  "worker-src blob: https: http:",
-  "manifest-src 'none'",
-].join("; ");
-
-/**
- * Tightest sandbox that still allows interactive demos.
- * MUST stay exactly "allow-scripts" — never add allow-same-origin (that would
- * let the preview share the parent origin and read localStorage / API keys).
- */
-export const PREVIEW_SANDBOX = "allow-scripts";
-
-// Blob "open in new tab" wrappers must NOT set a restrictive CSP.
-// srcdoc/blob iframes inherit the parent document's CSP and intersect it with
-// their own — a wrapper `script-src 'none'` would kill every demo script
-// (nav guard, scroll bridge, and the model's code). The wrapper HTML is fully
-// controlled (user content only appears inside an escaped srcdoc); the nested
-// iframe stays sandboxed without allow-same-origin so it cannot read
-// localStorage / API keys.
+// In-app previews load /preview-frame over HTTP so they get PREVIEW_CSP from
+// response headers and do NOT inherit the parent page CSP (srcdoc/blob would).
+// The parent postMessages the hardened HTML into that frame after it boots.
+//
+// Blob "open in new tab" wrappers must NOT set a restrictive CSP either —
+// their nested srcdoc inherits the wrapper policy.
 
 const PREVIEW_FALLBACK_BACKGROUND = "#080a08";
-
-/** Deny browser/device capabilities that interactive demos do not need. */
-export const PREVIEW_ALLOW = [
-  "accelerometer 'none'",
-  "autoplay 'none'",
-  "camera 'none'",
-  "clipboard-read 'none'",
-  "clipboard-write 'none'",
-  "display-capture 'none'",
-  "fullscreen 'none'",
-  "geolocation 'none'",
-  "gyroscope 'none'",
-  "magnetometer 'none'",
-  "microphone 'none'",
-  "payment 'none'",
-  "publickey-credentials-get 'none'",
-  "usb 'none'",
-  "web-share 'none'",
-  "xr-spatial-tracking 'none'",
-].join("; ");
 
 // Tiny bridge injected into a preview so scroll-link can drive it via postMessage
 // (the iframe is sandboxed without same-origin, so we can't touch it directly).
@@ -368,6 +334,13 @@ export function hardenPreviewDocument(
       ? doc.replace("</body>", `${bridge}</body>`)
       : `${doc}${bridge}`;
   }
+  // Tell the parent the demo document is in place (used to fade the iframe in).
+  // Prefer a painted signal over iframe "load", which also fires for the
+  // /preview-frame bootstrap before document.write.
+  const painted = `<script>parent.postMessage({__ab:"preview-painted"},"*")</scr` + `ipt>`;
+  doc = doc.includes("</body>")
+    ? doc.replace("</body>", `${painted}</body>`)
+    : `${doc}${painted}`;
   return doc;
 }
 
@@ -384,7 +357,7 @@ export function hardenedPreviewWrapperHTML(
   title = "AI Battle preview",
 ): string {
   const inner = hardenPreviewDocument(code);
-  return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title><style>html,body{margin:0;height:100%;background:${PREVIEW_FALLBACK_BACKGROUND}}iframe{display:block;width:100%;height:100%;border:0;background:${PREVIEW_FALLBACK_BACKGROUND}}</style></head><body><iframe sandbox="${PREVIEW_SANDBOX}" csp="${esc(PREVIEW_CSP)}" allow="${PREVIEW_ALLOW}" referrerpolicy="no-referrer" srcdoc="${esc(inner)}" title="${esc(title)}"></iframe></body></html>`;
+  return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title><style>html,body{margin:0;height:100%;background:${PREVIEW_FALLBACK_BACKGROUND}}iframe{display:block;width:100%;height:100%;border:0;background:${PREVIEW_FALLBACK_BACKGROUND}}</style></head><body><iframe sandbox="${PREVIEW_SANDBOX}" allow="${PREVIEW_ALLOW}" referrerpolicy="no-referrer" srcdoc="${esc(inner)}" title="${esc(title)}"></iframe></body></html>`;
 }
 
 /**
@@ -401,27 +374,74 @@ export function openHardenedPreview(code: string, title = "AI Battle preview"): 
 
 function previewIframeHTML(r: ResultView, resultKey: string): string {
   const doc = hardenPreviewDocument(r.code, { bridgeId: resultKey });
+  // Escaped into a text/plain script so </script> in demos cannot break out.
+  // The parent reads textContent and postMessages it into /preview-frame.
   return `
     <div class="relative h-full bg-[var(--color-surface)] p-1.5">
       <button data-action="reload-preview" data-model="${esc(resultKey)}" aria-label="Restart preview" class="absolute right-2 top-2 z-10 flex items-center gap-1 rounded-md border border-[var(--color-line)] bg-[var(--color-panel)]/90 px-2 py-1 text-[10px] text-[var(--color-ink-dim)] backdrop-blur transition-colors hover:text-[var(--color-ink)]" title="restart the demo">
         ${svg("i-refresh", "size-3.5")}<span>restart</span>
       </button>
-      <iframe data-preview="${esc(resultKey)}" class="h-full w-full rounded-lg bg-[var(--color-surface)] opacity-0 shadow-inner transition-opacity duration-300 ease-out motion-reduce:transition-none" sandbox="${PREVIEW_SANDBOX}" csp="${esc(PREVIEW_CSP)}" allow="${PREVIEW_ALLOW}" referrerpolicy="no-referrer" srcdoc="${esc(doc)}" title="Preview generated by ${esc(r.id)}"></iframe>
+      <script type="text/plain" hidden data-preview-source>${esc(doc)}</script>
+      <iframe data-preview="${esc(resultKey)}" class="h-full w-full rounded-lg bg-[var(--color-surface)] opacity-0 shadow-inner transition-opacity duration-300 ease-out motion-reduce:transition-none" sandbox="${PREVIEW_SANDBOX}" allow="${PREVIEW_ALLOW}" referrerpolicy="no-referrer" src="${PREVIEW_FRAME_PATH}" title="Preview generated by ${esc(r.id)}"></iframe>
     </div>`;
 }
 
-/** Fade previews in only after their srcdoc has finished loading. */
+const previewHtmlSent = new WeakSet<HTMLIFrameElement>();
+
+function readPreviewSource(frame: HTMLIFrameElement): string | null {
+  const holder = frame.parentElement?.querySelector("[data-preview-source]");
+  return holder?.textContent ?? null;
+}
+
+function sendPreviewHtml(frame: HTMLIFrameElement): void {
+  if (previewHtmlSent.has(frame)) return;
+  const html = readPreviewSource(frame);
+  if (html == null || !frame.contentWindow) return;
+  previewHtmlSent.add(frame);
+  frame.contentWindow.postMessage({ __ab: "preview-html", html }, "*");
+}
+
+function fadePreviewIn(frame: HTMLIFrameElement): void {
+  requestAnimationFrame(() => {
+    frame.classList.remove("opacity-0");
+    frame.classList.add("opacity-100");
+  });
+}
+
+function previewFrameForSource(
+  root: Document,
+  source: MessageEventSource | null,
+): HTMLIFrameElement | undefined {
+  return $$<HTMLIFrameElement>("iframe[data-preview]", root).find(
+    (candidate) => candidate.contentWindow === source,
+  );
+}
+
+/** Push HTML into /preview-frame iframes and fade them in after the demo loads. */
 export function installPreviewFade(root: Document = document): void {
+  const view = root.defaultView ?? (typeof window !== "undefined" ? window : null);
+  view?.addEventListener("message", (event) => {
+    const data = event.data;
+    if (!data || typeof data !== "object") return;
+    const frame = previewFrameForSource(root, event.source);
+    if (!frame) return;
+    if (data.__ab === "preview-ready") {
+      sendPreviewHtml(frame);
+      return;
+    }
+    if (data.__ab === "preview-painted") {
+      fadePreviewIn(frame);
+    }
+  });
+
+  // Backup if preview-ready was missed (e.g. listener attached late).
   root.addEventListener(
     "load",
     (event) => {
       const frame = event.target;
       if (!(frame instanceof HTMLIFrameElement) || !frame.matches("iframe[data-preview]"))
         return;
-      requestAnimationFrame(() => {
-        frame.classList.remove("opacity-0");
-        frame.classList.add("opacity-100");
-      });
+      sendPreviewHtml(frame);
     },
     true,
   );
@@ -430,7 +450,9 @@ export function installPreviewFade(root: Document = document): void {
 export function restartPreview(frame: HTMLIFrameElement): void {
   frame.classList.remove("opacity-100");
   frame.classList.add("opacity-0");
-  frame.srcdoc = frame.srcdoc;
+  previewHtmlSent.delete(frame);
+  // Force a fresh bootstrap navigation even if the path is unchanged.
+  frame.src = `${PREVIEW_FRAME_PATH}?t=${Date.now()}`;
 }
 
 // Content for a finished result (output / code / preview).

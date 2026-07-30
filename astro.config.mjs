@@ -7,15 +7,18 @@ import tailwindcss from '@tailwindcss/vite';
 // https://astro.build/config
 export default defineConfig({
   site: 'https://isbetter.ai',
-  adapter: cloudflare({ imageService: 'passthrough' }),
+  adapter: cloudflare({
+    imageService: 'passthrough',
+    // Serve public/_headers during `astro dev` too (CDN-friendly SITE_CSP).
+    experimental: { headersAndRedirectsDevModeSupport: true },
+  }),
   // No astro:assets transforms — skip sharp entirely.
   image: {
     service: passthroughImageService(),
   },
-  // CSP is delivered via public/_headers (HTTP), not Astro's meta CSP.
-  // srcdoc/blob preview iframes inherit + intersect the parent policy, so the
-  // header CSP must allow demo CDN/inline sources; hashed script/style would
-  // block them. Preview documents still add PREVIEW_CSP (forms/frames locked).
+  // CSP: SITE_CSP via middleware + public/_headers. In-app previews load
+  // /preview-frame over HTTP with its own PREVIEW_CSP (no parent inheritance).
+  // Keep SITE_CSP a superset of demo sources for any remaining srcdoc/blob tabs.
   vite: {
     plugins: [tailwindcss()]
   }
