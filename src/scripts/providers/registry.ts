@@ -122,10 +122,16 @@ const DEEPSEEK_PRICES: PriceRow[] = [
   ["deepseek-v4-pro", 0.435, 0.87],
 ];
 
+// Cache-miss input / output. Cache hits ($0.30/MTok) are not modeled separately.
+const KIMI_PRICES: PriceRow[] = [
+  ["kimi-k3", 3, 15],
+];
+
 const PRICE_TABLES: Partial<Record<ProviderId, PriceRow[]>> = {
   openai: OPENAI_PRICES,
   anthropic: ANTHROPIC_PRICES,
   deepseek: DEEPSEEK_PRICES,
+  kimi: KIMI_PRICES,
 };
 
 export function priceFor(

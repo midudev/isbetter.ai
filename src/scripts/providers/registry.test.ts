@@ -98,5 +98,9 @@ describe("provider registry", () => {
       prompt: 5 / 1e6,
       completion: 25 / 1e6,
     });
+    expect(priceFor("kimi", "kimi-k3")).toEqual({
+      prompt: 3 / 1e6,
+      completion: 15 / 1e6,
+    });
   });
 });
