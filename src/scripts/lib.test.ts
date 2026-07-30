@@ -6,6 +6,7 @@ import {
   HISTORY_KEY,
   downsampleMetricSamples,
   doneContentHTML,
+  enrichHistoryResultCost,
   estOutputTokens,
   estTokens,
   hardenPreviewDocument,
@@ -289,6 +290,77 @@ describe("history migration", () => {
       ttftMs: 20,
       costKnown: false,
     });
+  });
+
+  it("fills Unknown history costs from the built-in price table", () => {
+    localStorage.setItem(
+      HISTORY_KEY,
+      JSON.stringify([
+        {
+          id: "2",
+          ts: 2,
+          prompt: "kimi",
+          system: "",
+          results: [
+            {
+              id: "kimi-k3",
+              key: "kimi::kimi-k3",
+              provider: "kimi",
+              label: "Kimi K3",
+              raw: "ok",
+              code: "",
+              state: "done",
+              error: "",
+              promptTokens: 1_000_000,
+              completionTokens: 1_000_000,
+              totalTokens: 2_000_000,
+              cost: 0,
+              costKnown: false,
+              durationMs: 100,
+              metrics: [
+                {
+                  tMs: 50,
+                  completionTokens: 500_000,
+                  cost: 0,
+                  costKnown: false,
+                  estimated: true,
+                },
+              ],
+            },
+          ],
+        },
+      ]),
+    );
+
+    const [battle] = loadHistory();
+    expect(battle.results[0]).toMatchObject({
+      cost: 18,
+      costKnown: true,
+      usageEstimated: true,
+    });
+    expect(battle.results[0].metrics?.[0]).toMatchObject({
+      cost: 3 + 7.5,
+      costKnown: true,
+    });
+
+    // Direct helper: known costs stay untouched.
+    expect(
+      enrichHistoryResultCost({
+        id: "kimi-k3",
+        provider: "kimi",
+        label: "Kimi K3",
+        raw: "",
+        code: "",
+        state: "done",
+        error: "",
+        promptTokens: 10,
+        completionTokens: 10,
+        totalTokens: 20,
+        cost: 1.23,
+        costKnown: true,
+        durationMs: 1,
+      }),
+    ).toMatchObject({ cost: 1.23, costKnown: true });
   });
 
   it("persists the current schema version and blind-mode mapping", () => {

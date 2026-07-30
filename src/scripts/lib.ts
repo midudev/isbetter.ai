@@ -3,7 +3,8 @@
    Pure functions + result rendering + history storage. No page-specific state.
    ========================================================================= */
 import { modelBrandFor } from "./model-icons";
-import { PROVIDERS } from "./providers/registry";
+import { PROVIDERS, priceFor } from "./providers/registry";
+import type { ProviderId } from "./providers/types";
 import {
   downsampleMetricSamples,
   type MetricSample,
@@ -1217,6 +1218,56 @@ export interface Battle {
   sharedId?: string;
 }
 
+/** Recalculate cost from the built-in price table when history has Unknown. */
+export function enrichHistoryResultCost(result: HistoryResult): HistoryResult {
+  if (result.costKnown !== false) return result;
+
+  const key =
+    result.key ||
+    (result.provider ? `${result.provider}::${result.id}` : `openrouter::${result.id}`);
+  const [providerFromKey, ...idParts] = key.split("::");
+  const provider = (result.provider || providerFromKey || "") as ProviderId;
+  const id = result.id || idParts.join("::");
+  if (!provider || !id) return result;
+  if (provider === "local") return { ...result, cost: 0, costKnown: true };
+
+  const price = priceFor(provider, id);
+  if (!price) return result;
+
+  const promptTokens = Number.isFinite(result.promptTokens) ? result.promptTokens : 0;
+  const completionTokens = Number.isFinite(result.completionTokens)
+    ? result.completionTokens
+    : 0;
+  if (promptTokens <= 0 && completionTokens <= 0) return result;
+
+  const cost = promptTokens * price.prompt + completionTokens * price.completion;
+  const metrics = Array.isArray(result.metrics)
+    ? result.metrics.map((sample) =>
+        sample.costKnown
+          ? sample
+          : {
+              ...sample,
+              cost:
+                promptTokens * price.prompt +
+                (Number.isFinite(sample.completionTokens)
+                  ? sample.completionTokens
+                  : 0) *
+                  price.completion,
+              costKnown: true,
+            },
+      )
+    : result.metrics;
+
+  return {
+    ...result,
+    cost,
+    costKnown: true,
+    // Table pricing is always an estimate relative to live billed usage.
+    usageEstimated: true,
+    metrics,
+  };
+}
+
 export function loadHistory(): Battle[] {
   try {
     const parsed = JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]");
@@ -1224,28 +1275,30 @@ export function loadHistory(): Battle[] {
     return parsed.map((battle: Battle) => ({
       ...battle,
       schemaVersion: 3,
-      results: (battle.results || []).map((result) => ({
-        ...result,
-        key:
-          result.key ||
-          (result.provider ? `${result.provider}::${result.id}` : `openrouter::${result.id}`),
-        ttftMs:
-          result.ttftMs ??
-          (result.genMs != null ? Math.max(0, result.durationMs - result.genMs) : undefined),
-        costKnown:
-          result.costKnown ?? (result.provider === "local" || result.cost > 0),
-        usageEstimated: result.usageEstimated ?? false,
-        metrics: Array.isArray(result.metrics)
-          ? downsampleMetricSamples(
-              result.metrics.filter(
-                (sample) =>
-                  Number.isFinite(sample.tMs) &&
-                  Number.isFinite(sample.completionTokens) &&
-                  Number.isFinite(sample.cost),
-              ),
-            )
-          : [],
-      })),
+      results: (battle.results || []).map((result) =>
+        enrichHistoryResultCost({
+          ...result,
+          key:
+            result.key ||
+            (result.provider ? `${result.provider}::${result.id}` : `openrouter::${result.id}`),
+          ttftMs:
+            result.ttftMs ??
+            (result.genMs != null ? Math.max(0, result.durationMs - result.genMs) : undefined),
+          costKnown:
+            result.costKnown ?? (result.provider === "local" || result.cost > 0),
+          usageEstimated: result.usageEstimated ?? false,
+          metrics: Array.isArray(result.metrics)
+            ? downsampleMetricSamples(
+                result.metrics.filter(
+                  (sample) =>
+                    Number.isFinite(sample.tMs) &&
+                    Number.isFinite(sample.completionTokens) &&
+                    Number.isFinite(sample.cost),
+                ),
+              )
+            : [],
+        }),
+      ),
     }));
   } catch {
     return [];
