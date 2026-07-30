@@ -1575,21 +1575,6 @@ function computeBests() {
   refreshComparison();
 }
 
-async function runWithConcurrency<T>(
-  items: T[],
-  limit: number,
-  worker: (item: T) => Promise<void>,
-) {
-  let next = 0;
-  const runners = Array.from({ length: Math.min(limit, items.length) }, async () => {
-    while (next < items.length) {
-      const item = items[next++];
-      await worker(item);
-    }
-  });
-  await Promise.allSettled(runners);
-}
-
 // force = true re-runs every selected model (ignores the cache). Otherwise we
 // reuse any result already computed for this exact prompt + system prompt and
 // only call the models that are new, stale, or errored — saving tokens.
@@ -1679,7 +1664,7 @@ async function runBattle(force = false) {
   els.runIcon.classList.add("spin");
   refreshComparison();
 
-  await runWithConcurrency(toRun, 3, callModel);
+  await Promise.allSettled(toRun.map((e) => callModel(e)));
 
   running = false;
   els.results.setAttribute("aria-busy", "false");
