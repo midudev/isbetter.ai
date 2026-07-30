@@ -268,11 +268,9 @@ function numberedCodeHTML(highlighted: string): string {
 }
 
 /* ------------------------ untrusted preview hardening --------------------- */
-// API keys live in the parent page's localStorage (ab:key:*). The hard
-// requirement is that preview code must never read that storage. Opaque-origin
-// iframes (sandbox without allow-same-origin) enforce this: parent/top storage
-// is cross-origin and inaccessible. Everything else (CSP, nav guard, allow=)
-// is defense in depth around that boundary.
+// Preview demos run in a sandboxed iframe (scripts + same-origin so
+// localStorage works). CSP / nav guard / allow= limit network gadgets and
+// browser capabilities; form posts and nested frames stay blocked.
 //
 // In-app previews load /preview-frame over HTTP so they get PREVIEW_CSP from
 // response headers and do NOT inherit the parent page CSP (srcdoc/blob would).
@@ -283,13 +281,8 @@ function numberedCodeHTML(highlighted: string): string {
 
 const PREVIEW_FALLBACK_BACKGROUND = "#080a08";
 
-// Opaque-origin sandboxes throw on window.localStorage / sessionStorage access.
-// Demos often touch storage; provide an in-memory shim so they keep working
-// without ever reaching the parent origin's keys (ab:key:*).
-const PREVIEW_STORAGE_SHIM = `<script>(function(){function mem(){var s=Object.create(null);return{get length(){return Object.keys(s).length},key:function(i){return Object.keys(s)[i]||null},getItem:function(k){k=String(k);return Object.prototype.hasOwnProperty.call(s,k)?s[k]:null},setItem:function(k,v){s[String(k)]=String(v)},removeItem:function(k){delete s[String(k)]},clear:function(){for(var k in s)delete s[k]}}}function install(name,store){try{Object.defineProperty(window,name,{configurable:true,enumerable:true,get:function(){return store}})}catch(e){try{window[name]=store}catch(e2){}}}try{void localStorage}catch(e){install("localStorage",mem())}try{void sessionStorage}catch(e){install("sessionStorage",mem())}})()</scr`+`ipt>`;
-
 // Tiny bridge injected into a preview so scroll-link can drive it via postMessage
-// (the iframe is sandboxed without same-origin, so we can't touch it directly).
+// (cross-frame; we drive scroll via postMessage rather than touching the frame DOM).
 function scrollBridge(id: string): string {
   return `<script>(function(){var ID=${JSON.stringify(id)},lock=false;function engage(){lock=false;parent.postMessage({__ab:"engage",id:ID},"*")}["wheel","touchstart","pointerdown","keydown"].forEach(function(type){addEventListener(type,engage,{passive:true})});addEventListener("scroll",function(){if(lock)return;var h=document.documentElement.scrollHeight-innerHeight;parent.postMessage({__ab:"scroll",id:ID,ratio:h>0?scrollY/h:0},"*")},{passive:true});addEventListener("message",function(e){var d=e.data;if(d&&d.__ab==="set"&&d.id!==ID){lock=true;var root=document.documentElement,behavior=root.style.scrollBehavior,h=root.scrollHeight-innerHeight;root.style.scrollBehavior="auto";scrollTo(0,(d.ratio||0)*h);requestAnimationFrame(function(){root.style.scrollBehavior=behavior});setTimeout(function(){lock=false},120)}})})()</scr`+`ipt>`;
 }
@@ -321,8 +314,7 @@ export function hardenPreviewDocument(
   const untrusted = stripPreviewNavigationGadgets(code);
   const cspMeta = `<meta http-equiv="Content-Security-Policy" content="${PREVIEW_CSP}">`;
   const fallbackStyle = `<style>html,body{min-height:100%;background:${PREVIEW_FALLBACK_BACKGROUND}}</style>`;
-  // Storage shim must run before any demo script touches localStorage.
-  const securityBootstrap = `${cspMeta}${fallbackStyle}${PREVIEW_STORAGE_SHIM}${PREVIEW_NAVIGATION_GUARD}`;
+  const securityBootstrap = `${cspMeta}${fallbackStyle}${PREVIEW_NAVIGATION_GUARD}`;
   const withoutDoctype = untrusted.replace(/<!doctype\b[^>]*>/gi, "");
   const htmlAttrs = withoutDoctype.match(/<html\b([^>]*)>/i)?.[1] || "";
   const completeDocument = withoutDoctype.match(
@@ -355,8 +347,7 @@ export function hardenPreviewDocument(
  * app (blob: inherits creator origin) and intentionally has no CSP — srcdoc
  * children inherit parent CSP, so a wrapper `script-src 'none'` would block
  * every demo script. It contains no scripts of its own; only the nested
- * opaque-origin iframe (sandbox without allow-same-origin) may execute the
- * demo under PREVIEW_CSP.
+ * sandboxed iframe may execute the demo under PREVIEW_CSP.
  */
 export function hardenedPreviewWrapperHTML(
   code: string,
@@ -369,7 +360,7 @@ export function hardenedPreviewWrapperHTML(
 /**
  * Open untrusted HTML in a new tab without giving it a free top-level page.
  * The blob wrapper is ours (no scripts); the demo runs inside a nested
- * sandboxed iframe without same-origin access to localStorage.
+ * sandboxed iframe.
  */
 export function openHardenedPreview(code: string, title = "AI Battle preview"): void {
   const wrapper = hardenedPreviewWrapperHTML(code, title);
@@ -480,7 +471,7 @@ export function doneContentHTML(
             ${svg("i-alert", "size-7 text-[var(--color-ink-faint)]")}
             <div>
               <p class="text-[13px] font-medium text-[var(--color-ink)]">This public preview contains untrusted code</p>
-              <p class="mt-1 text-[11px] leading-relaxed text-[var(--color-ink-faint)]">It runs in a restricted sandbox (opaque origin) only after you approve it. External CDN scripts may load.</p>
+              <p class="mt-1 text-[11px] leading-relaxed text-[var(--color-ink-faint)]">It runs in a restricted sandbox only after you approve it. External CDN scripts may load.</p>
             </div>
             <button data-action="run-preview" data-model="${esc(resultKey)}" class="mt-1 rounded-lg bg-[var(--color-accent)] px-4 py-2 text-[12px] font-medium text-black transition-opacity hover:opacity-90">Run preview</button>
           </div>

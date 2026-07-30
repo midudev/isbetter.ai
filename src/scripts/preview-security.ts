@@ -6,8 +6,7 @@
 /**
  * CSP for untrusted preview documents. Interactive demos may load CDN
  * scripts (three.js, etc.) over https/http. Form exfil, nested frames,
- * plugins, and base-tag hijacks stay blocked. Isolation from parent
- * localStorage comes from sandbox without allow-same-origin — not from CSP.
+ * plugins, and base-tag hijacks stay blocked.
  */
 export const PREVIEW_CSP = [
   "default-src 'none'",
@@ -54,11 +53,11 @@ export const SITE_CSP = [
 export const PREVIEW_FRAME_PATH = "/preview-frame";
 
 /**
- * Tightest sandbox that still allows interactive demos.
- * MUST stay exactly "allow-scripts" — never add allow-same-origin (that would
- * let the preview share the parent origin and read localStorage / API keys).
+ * Preview sandbox. `allow-same-origin` is required so demos can use the real
+ * `localStorage` / `sessionStorage` APIs (without it the browser throws).
+ * Still no allow-forms / allow-top-navigation / allow-popups.
  */
-export const PREVIEW_SANDBOX = "allow-scripts";
+export const PREVIEW_SANDBOX = "allow-scripts allow-same-origin";
 
 /** Deny browser/device capabilities that interactive demos do not need. */
 export const PREVIEW_ALLOW = [

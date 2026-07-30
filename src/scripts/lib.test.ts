@@ -104,24 +104,12 @@ describe("result extraction", () => {
 });
 
 describe("preview hardening", () => {
-  it("keeps the sandbox opaque so previews cannot read parent localStorage", () => {
-    // API keys are ab:key:* in the parent origin. allow-same-origin would
-    // collapse that isolation.
-    expect(PREVIEW_SANDBOX).toBe("allow-scripts");
-    expect(PREVIEW_SANDBOX.split(/\s+/)).toEqual(["allow-scripts"]);
-    expect(PREVIEW_SANDBOX).not.toContain("allow-same-origin");
-  });
-
-  it("shims localStorage before demo scripts so sandboxed previews do not throw", () => {
-    const hardened = hardenPreviewDocument(
-      `<!doctype html><html><body><script>localStorage.setItem("x","1")</script></body></html>`,
-    );
-    const shimAt = hardened.indexOf('install("localStorage"');
-    const demoAt = hardened.indexOf('localStorage.setItem("x","1")');
-    expect(shimAt).toBeGreaterThan(-1);
-    expect(demoAt).toBeGreaterThan(-1);
-    expect(shimAt).toBeLessThan(demoAt);
-    expect(hardened).toContain('install("sessionStorage"');
+  it("allows same-origin so demos can use real localStorage", () => {
+    expect(PREVIEW_SANDBOX).toBe("allow-scripts allow-same-origin");
+    expect(PREVIEW_SANDBOX.split(/\s+/)).toEqual([
+      "allow-scripts",
+      "allow-same-origin",
+    ]);
   });
 
   it("injects CSP (CDN scripts allowed) and strips navigation gadgets", () => {
@@ -187,7 +175,7 @@ describe("preview hardening", () => {
     expect(html).toContain("<textarea hidden data-preview-source>");
     expect(html).toContain(`allow="${PREVIEW_ALLOW}"`);
     expect(html).toContain('referrerpolicy="no-referrer"');
-    expect(html).not.toContain("allow-same-origin");
+    expect(html).toContain("allow-same-origin");
     expect(html).not.toContain("allow-modals");
     expect(html).not.toContain("allow-forms");
     expect(html).not.toContain("srcdoc=");
@@ -199,23 +187,23 @@ describe("preview hardening", () => {
     expect(html).not.toMatch(/<textarea[^>]*>\s*<!DOCTYPE/i);
   });
 
-  it("opens new-tab previews via a CSP-free wrapper and nested opaque iframe", () => {
+  it("opens new-tab previews via a CSP-free wrapper and nested sandboxed iframe", () => {
     const wrapper = hardenedPreviewWrapperHTML(
-      `<!doctype html><html><body><script>parent.localStorage.getItem("ab:key:openai")</script></body></html>`,
+      `<!doctype html><html><body><script>localStorage.setItem("demo","1")</script></body></html>`,
       'Title <">&',
     );
 
     // No wrapper CSP: srcdoc inherits parent policy, so script-src 'none'
-    // would block the demo. Isolation is the nested sandbox (opaque origin).
+    // would block the demo. Demo runs in the nested sandboxed iframe.
     expect(wrapper).not.toMatch(/http-equiv="Content-Security-Policy"/i);
     expect(wrapper).not.toContain("script-src 'none'");
     expect(wrapper).toContain(`sandbox="${PREVIEW_SANDBOX}"`);
-    expect(wrapper).not.toContain("allow-same-origin");
+    expect(wrapper).toContain("allow-same-origin");
     expect(wrapper).toContain("Title &lt;&quot;&gt;&amp;");
     // Untrusted markup only appears inside the escaped srcdoc attribute.
     const srcdocMatch = wrapper.match(/srcdoc="([^"]*)"/);
     expect(srcdocMatch).toBeTruthy();
-    expect(srcdocMatch![1]).toContain("localStorage.getItem");
+    expect(srcdocMatch![1]).toContain("localStorage.setItem");
     expect(wrapper.replace(srcdocMatch![0], "")).not.toContain("localStorage");
     // Nested preview still carries its own PREVIEW_CSP via meta (HTML-escaped).
     expect(srcdocMatch![1]).toContain("Content-Security-Policy");
