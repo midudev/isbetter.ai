@@ -549,7 +549,23 @@ function renderModelList() {
   if (!matches.length && models.length && qraw) {
     html += `<li class="px-3 py-6 text-center text-[var(--color-ink-faint)]">no matches</li>`;
   }
+
+  // Replacing innerHTML drops the node that held focus, so a keyboard user who
+  // selects an option lands on <body> and the roving arrow keys stop working.
+  // Remember the focused option and restore it after the re-render.
+  const active = document.activeElement;
+  const focusedKey =
+    active instanceof HTMLElement && els.list.contains(active)
+      ? active.closest<HTMLElement>("[data-add]")?.dataset.add
+      : undefined;
+
   els.list.innerHTML = html;
+
+  if (focusedKey) {
+    els.list
+      .querySelector<HTMLButtonElement>(`[data-add="${CSS.escape(focusedKey)}"]`)
+      ?.focus();
+  }
 }
 
 els.list.addEventListener("click", (e) => {
