@@ -75,17 +75,26 @@ export function parseAnthropicChunk(value: unknown): Chunk {
   return { content, reasoning, usage, ...(finishReason ? { finishReason } : {}) };
 }
 
+// Standard tier, short-context (≤272K input) rates.
 const OPENAI_PRICES: PriceRow[] = [
-  ["gpt-5.6-sol", 5, 30],
-  ["gpt-5.6-terra", 2.5, 15],
-  ["gpt-5.6-luna", 1, 6],
-  ["gpt-5.6", 2.5, 15],
+  ["gpt-6.1-sol", 2, 10],
+  ["gpt-6-astra", 10, 50],
+  ["gpt-6-sol", 2, 10],
+  ["gpt-6-luna", 0.1, 0.5],
+  ["gpt-5.6-sol", 4, 20],
+  ["gpt-5.6-terra", 2, 12],
+  ["gpt-5.6-luna", 0.2, 1.2],
+  ["gpt-5.6", 2, 12],
   ["gpt-5.5-pro", 30, 180],
   ["gpt-5.5", 5, 30],
   ["gpt-5.4-mini", 0.75, 4.5],
   ["gpt-5.4-nano", 0.2, 1.25],
   ["gpt-5.4-pro", 30, 180],
   ["gpt-5.4", 2.5, 15],
+  ["gpt-5.2-pro", 21, 168],
+  ["gpt-5.2", 1.75, 14],
+  ["gpt-5.1", 1.25, 10],
+  ["gpt-5-pro", 15, 120],
   ["gpt-5-mini", 0.25, 2],
   ["gpt-5-nano", 0.05, 0.4],
   ["gpt-5", 1.25, 10],
@@ -93,15 +102,21 @@ const OPENAI_PRICES: PriceRow[] = [
   ["gpt-4.1-nano", 0.1, 0.4],
   ["gpt-4.1", 2, 8],
   ["gpt-4o-mini", 0.15, 0.6],
+  ["gpt-4o-2024-05-13", 5, 15],
   ["gpt-4o", 2.5, 10],
   ["o4-mini", 1.1, 4.4],
+  ["o3-pro", 20, 80],
   ["o3-mini", 1.1, 4.4],
   ["o3", 2, 8],
+  ["o1-pro", 150, 600],
   ["o1", 15, 60],
 ];
 
 const ANTHROPIC_PRICES: PriceRow[] = [
+  ["claude-fable-5-1", 10, 50],
   ["claude-fable-5", 10, 50],
+  ["claude-mythos-5-1", 10, 50],
+  ["claude-opus-5-5", 4, 20],
   ["claude-opus-5", 5, 25],
   ["claude-opus-4-8", 5, 25],
   ["claude-opus-4-7", 5, 25],
@@ -109,22 +124,31 @@ const ANTHROPIC_PRICES: PriceRow[] = [
   ["claude-opus-4-5", 5, 25],
   ["claude-opus-4-1", 15, 75],
   ["claude-opus-4", 15, 75],
-  ["claude-sonnet-5", 3, 15],
+  ["claude-sonnet-5-5", 2, 10],
+  ["claude-sonnet-5", 2, 10],
   ["claude-sonnet-4-6", 3, 15],
   ["claude-sonnet-4-5", 3, 15],
   ["claude-sonnet-4", 3, 15],
+  // ≤100K-token prompts; longer prompts bill at $0.50 / $2.50.
+  ["claude-haiku-5-5", 0.1, 0.5],
   ["claude-haiku-4-5", 1, 5],
   ["claude-haiku-3-5", 0.8, 4],
 ];
 
+// Peak cache-miss input / output; off-peak hours bill at half.
+// The legacy deepseek-v4-flash names are served by V4.1 Flash at the Flash price.
 const DEEPSEEK_PRICES: PriceRow[] = [
-  ["deepseek-v4-flash", 0.14, 0.28],
-  ["deepseek-v4-pro", 0.435, 0.87],
+  ["deepseek-flash", 0.3, 1.2],
+  ["deepseek-v4-flash", 0.3, 1.2],
+  ["deepseek-v4-pro", 1.32, 3.96],
 ];
 
-// Cache-miss input / output. Cache hits ($0.30/MTok) are not modeled separately.
+// Cache-miss input / output. Cache hits are not modeled separately.
 const KIMI_PRICES: PriceRow[] = [
   ["kimi-k3", 3, 15],
+  ["kimi-k2.7-code-highspeed", 1.9, 8],
+  ["kimi-k2.7-code", 0.95, 4],
+  ["kimi-k2.6", 0.95, 4],
 ];
 
 const PRICE_TABLES: Partial<Record<ProviderId, PriceRow[]>> = {
@@ -211,8 +235,8 @@ export function anthropicMaxOutput(model: string): number {
   if (/haiku-3|claude-3(?:-5)?-haiku/.test(id)) return 8192;
   // Early Opus 4 / Opus 4.1 — 32k.
   if (/claude-opus-4-1(?:-|$)/.test(id) || /claude-opus-4(?:-20|$)/.test(id)) return 32_000;
-  // Fable / Mythos / Opus·Sonnet 5 / Opus 4.6+ / Sonnet 4.6 — 128k.
-  if (/fable|mythos|opus-5|sonnet-5|opus-4-[6-9]|sonnet-4-6/.test(id)) return 128_000;
+  // Fable / Mythos / Opus·Sonnet·Haiku 5.x / Opus 4.6+ / Sonnet 4.6 — 128k.
+  if (/fable|mythos|opus-5|sonnet-5|haiku-5|opus-4-[6-9]|sonnet-4-6/.test(id)) return 128_000;
   // Opus 4.5, Sonnet 4.5, Haiku 4.5, Sonnet 4, etc. — 64k.
   return 64_000;
 }

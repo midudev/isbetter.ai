@@ -44,6 +44,7 @@ describe("provider registry", () => {
     expect(anthropicMaxOutput("claude-opus-4-1")).toBe(32_000);
     expect(anthropicMaxOutput("claude-haiku-4-5")).toBe(64_000);
     expect(anthropicMaxOutput("claude-sonnet-5")).toBe(128_000);
+    expect(anthropicMaxOutput("claude-haiku-5-5")).toBe(128_000);
   });
 
   it("normalizes OpenAI-compatible content, reasoning and usage", () => {
@@ -83,8 +84,36 @@ describe("provider registry", () => {
   it("returns configured model pricing and null when unknown", () => {
     expect(priceFor("groq", "unknown-model")).toBeNull();
     expect(priceFor("deepseek", "deepseek-v4-flash")).toEqual({
-      prompt: 0.14 / 1e6,
-      completion: 0.28 / 1e6,
+      prompt: 0.3 / 1e6,
+      completion: 1.2 / 1e6,
+    });
+    expect(priceFor("openai", "gpt-6.1-sol")).toEqual({
+      prompt: 2 / 1e6,
+      completion: 10 / 1e6,
+    });
+    expect(priceFor("openai", "gpt-5.2-pro")).toEqual({
+      prompt: 21 / 1e6,
+      completion: 168 / 1e6,
+    });
+    expect(priceFor("openai", "o1-pro")).toEqual({
+      prompt: 150 / 1e6,
+      completion: 600 / 1e6,
+    });
+    expect(priceFor("anthropic", "claude-opus-5-5")).toEqual({
+      prompt: 4 / 1e6,
+      completion: 20 / 1e6,
+    });
+    expect(priceFor("anthropic", "claude-sonnet-5")).toEqual({
+      prompt: 2 / 1e6,
+      completion: 10 / 1e6,
+    });
+    expect(priceFor("anthropic", "claude-haiku-5-5")).toEqual({
+      prompt: 0.1 / 1e6,
+      completion: 0.5 / 1e6,
+    });
+    expect(priceFor("kimi", "kimi-k2.7-code-highspeed")).toEqual({
+      prompt: 1.9 / 1e6,
+      completion: 8 / 1e6,
     });
     expect(priceFor("anthropic", "claude-fable-5")).toEqual({
       prompt: 10 / 1e6,
