@@ -489,8 +489,21 @@ async function initBattle(b: Battle) {
     const tag = el.tagName;
     return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || el.isContentEditable;
   };
+  const hasUnsavedCode = () =>
+    [...results.querySelectorAll<HTMLTextAreaElement>("textarea[data-code-edit]")].some(
+      (ta) => {
+        const v = views.find((x) => keyOf(x) === ta.dataset.model);
+        return !!v && ta.value !== (v.code ?? "");
+      },
+    );
+  // Covers Escape, the back link and closing the tab alike.
+  window.addEventListener("beforeunload", (e) => {
+    if (hasUnsavedCode()) e.preventDefault();
+  });
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
+      // While typing, Escape only leaves the field — same as the arena.
+      if (isTyping(e.target)) return (e.target as HTMLElement).blur();
       location.href = "/";
       return;
     }
