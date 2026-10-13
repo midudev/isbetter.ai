@@ -68,15 +68,15 @@ const parseKey = (k: string) => {
 
 // Default line-up (needs no key to list — OpenRouter). Falls back per provider.
 const DEFAULT_CONTENDERS = [
-  "openrouter::anthropic/claude-opus-4.8",
-  "openrouter::openai/gpt-5.5",
-  "openrouter::google/gemini-3.5-flash",
+  "openrouter::anthropic/claude-opus-5.5",
+  "openrouter::openai/gpt-6.1-sol",
+  "openrouter::google/gemini-3.8-flash",
 ];
 const OR_DEFAULTS = [
-  "anthropic/claude-opus-4.8",
-  "openai/gpt-5.5",
-  "google/gemini-3.5-flash",
-  "deepseek/deepseek-chat-v3.1",
+  "anthropic/claude-opus-5.5",
+  "openai/gpt-6.1-sol",
+  "google/gemini-3.8-flash",
+  "deepseek/deepseek-v4.1-flash",
 ];
 const MAX_CONTENDERS = 6;
 const BRAND_KEYWORDS = ["claude", "openai/gpt", "gemini", "deepseek", "grok", "llama"];
